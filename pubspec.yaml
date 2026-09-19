@@ -4,12 +4,19 @@ publish_to: 'none'
 version: 1.0.0+1
 
 environment:
-  sdk: '>=3.0.0 <4.0.0'
+  sdk: '>=3.4.0 <4.0.0'
 
 dependencies:
   flutter:
     sdk: flutter
+  auto_route: ^10.0.0
+  flutter_bloc: ^9.0.0
+  equatable: ^2.0.5
   shared_preferences: ^2.2.2
+
+dev_dependencies:
+  auto_route_generator: ^10.0.0
+  build_runner: ^2.4.13
 
 flutter:
   uses-material-design: true
