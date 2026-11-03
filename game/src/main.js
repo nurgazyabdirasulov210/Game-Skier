@@ -357,6 +357,7 @@ requestAnimationFrame(frame);
 
   handleKeys();
   const inp = input.read();
+  input.edges.clear();
 
   // time of day
   if (todTarget !== null) {

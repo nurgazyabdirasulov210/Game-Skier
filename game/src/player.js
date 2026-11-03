@@ -254,13 +254,13 @@ export class Player {
     const steerAir = this.steerLock ? 0 : input.steer;
     const pitchAir = this.pitchLock ? 0 : input.pitch;
     const target = -steerAir * 7.2;
-    const acc = steerAir !== 0 ? 26 : 14;
+    const acc = steerAir !== 0 ? 26 : 42;
     this.spinVel += clamp(target - this.spinVel, -acc * dt, acc * dt);
     this.yaw += this.spinVel * dt;
     this.spinAcc += this.spinVel * dt;
     // flips (forward = positive)
     const ft = pitchAir * 6.0;
-    const facc = pitchAir !== 0 ? 20 : 12;
+    const facc = pitchAir !== 0 ? 20 : 30;
     this.flipVel += clamp(ft - this.flipVel, -facc * dt, facc * dt);
     // self-levelling when no input and nearly upright
     if (pitchAir === 0) {
@@ -318,7 +318,7 @@ export class Player {
       glide: this.glideTime || 0,
     });
     this.glideTime = 0;
-    this.stampCrater(0.7 + Math.min(impact, 14) * 0.04, 0.25);
+    if (impact > 6) this.stampCrater(0.6 + Math.min(impact, 16) * 0.04, 0.12 + Math.min(impact, 16) * 0.012);
   }
 
   crash(reason) {
@@ -376,7 +376,7 @@ export class Player {
       this.emit('glider', false);
       return true;
     }
-    if (this.inAir && this.gap > 2.5 && this.airTime > 0.25) {
+    if (this.inAir && this.gap > 2.2) {
       this.gliding = true;
       this.glideTime = this.glideTime || 0;
       this.flip = 0; this.flipVel = 0; this.spinVel = 0; this.grab = 0;
@@ -557,7 +557,12 @@ export class Player {
     this.speed = v.length();
     this.topSpeed = Math.max(this.topSpeed, this.speed);
     this.invuln = Math.max(0, this.invuln - dt);
-    if (input.gliderPressed) this.toggleGlider();
+    // a glider press is remembered briefly, so tapping just before you leave the lip still works
+    if (input.gliderPressed) this.gliderBuffer = 0.45;
+    if (this.gliderBuffer > 0) {
+      this.gliderBuffer -= dt;
+      if (this.toggleGlider()) this.gliderBuffer = 0;
+    }
 
     // lean into turns from lateral acceleration
     const grounded = this.grounded && !this.inAir;

@@ -33,10 +33,10 @@ export const KEYS = [
   K({
     name: 'Золотой час', t: 0.52,
     sunEl: 12, sunAz: 15, keyIntensity: 2.05,
-    sun: '#ffc070', zenith: '#3b5fb5', horizon: '#ffd6a0', fog: '#f1cfae', fogSun: '#ffc27a',
-    snowLit: '#fff2dc', snowShadow: '#6f78d8', ambTop: '#8a98e0', ambBottom: '#f2d2b8',
+    sun: '#ffd09a', zenith: '#3558b8', horizon: '#ffd2ae', fog: '#d9c4c4', fogSun: '#ffc888',
+    snowLit: '#fff6ee', snowShadow: '#6a72d6', ambTop: '#8a98e0', ambBottom: '#f2d2c4',
     exposure: 1.0, bloom: 0.55, rays: 0.7, stars: 0.0, aurora: 0.0, snowfall: 0.0, clouds: 0.5,
-    lift: '#1c1226', gain: '#fff4e2', sat: 1.12, fogDist: 1.05, lamp: 0.0,
+    lift: '#1a1230', gain: '#fff8f0', sat: 1.1, fogDist: 1.1, lamp: 0.0,
   }),
   K({
     name: 'Закат', t: 0.64,

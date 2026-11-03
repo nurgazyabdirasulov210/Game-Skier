@@ -106,7 +106,7 @@ export function judgeLanding(info) {
   if (air < 0.5 && info.spin < 2.6 && Math.abs(info.flip) < 4) return out;
   // spins: nearest multiple of 180 that we are close enough to
   const halfTurns = Math.round(info.spin / Math.PI);
-  if (halfTurns >= 1 && Math.abs(info.spin - halfTurns * Math.PI) < 0.75) {
+  if (halfTurns >= 1 && Math.abs(info.spin - halfTurns * Math.PI) < 1.2) {
     const deg = halfTurns * 180;
     out.push([(SPIN_NAMES[deg] || String(deg)) + '°', 90 * Math.pow(halfTurns, 1.35), 1]);
   }
@@ -117,7 +117,7 @@ export function judgeLanding(info) {
     const n = pre ? pre + nm : nm[0].toUpperCase() + nm.slice(1);
     out.push([n, 450 * Math.pow(flips, 1.5), 1]);
   }
-  if (info.grab > 0.25) out.push([GRAB_NAMES[info.grabKind] || 'Грэб', 90 + info.grab * 260, 1]);
+  if (info.grab > 0.25) out.push([GRAB_NAMES[info.grabKind] || 'Грэб', 90 + Math.min(info.grab, 1.6) * 190, 1]);
   if (info.glide > 1) out.push([`Парение ${info.glide.toFixed(0)} с`, info.glide * 30, 0]);
   else if (air > 0.6) {
     const big = info.height > 7;

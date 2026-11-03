@@ -55,20 +55,23 @@ export class Sky {
             col += vec3(0.25, 0.3, 0.5) * band * p_fbm(dir.xz * 6.0 / (abs(dir.y) + 0.3)) * 0.18 * uStarsAmt;
           }
 
-          // aurora curtains
+          // aurora: curtains hanging in the sky, sharp lower hem, rays fading upward
           if (uAuroraAmt > 0.01 && y > 0.0) {
+            float az = atan(dir.x, -dir.z);
+            vec2 circ = vec2(cos(az), sin(az));
+            float el = asin(clamp(y, 0.0, 1.0));
             vec3 acc = vec3(0.0);
-            for (int i = 0; i < 6; i++) {
+            for (int i = 0; i < 2; i++) {
               float fi = float(i);
-              float hgt = 0.35 + fi * 0.05;
-              vec2 uv = dir.xz / (y + 0.08) * hgt;
-              uv.x += uTime * 0.01;
-              float n = p_fbm(vec2(uv.x * 0.9, uv.y * 0.25) + fi * 0.13 + uTime * 0.015);
-              float curtain = smoothstep(0.035, 0.0, abs(n - 0.55 + sin(uv.x * 1.3 + uTime * 0.05) * 0.06));
-              vec3 ac = mix(vec3(0.15, 1.6, 0.8), vec3(0.9, 0.3, 1.4), fi / 6.0);
-              acc += ac * curtain * (1.0 - fi / 7.0);
+              float base = 0.32 + fi * 0.16 + 0.07 * sin(az * 2.0 + fi * 2.1 + uTime * 0.04) + 0.06 * (p_vnoise(circ * (2.0 + fi) + uTime * 0.02) - 0.5);
+              float d = el - base;
+              float hem = d < 0.0 ? exp(-d * d / 0.00025) : exp(-d / (0.16 + fi * 0.05));
+              float rays = 0.45 + 0.55 * p_vnoise(circ * (38.0 + fi * 11.0) + vec2(uTime * 0.12, fi));
+              float fold = 0.5 + 0.5 * sin(az * (5.0 + fi * 3.0) + p_vnoise(circ * 3.0 + uTime * 0.03) * 6.0);
+              vec3 ac = mix(vec3(0.15, 1.7, 0.75), vec3(0.95, 0.3, 1.5), smoothstep(0.0, 0.3, d));
+              acc += ac * hem * rays * (0.45 + 0.55 * fold) * (1.0 - fi * 0.35);
             }
-            col += acc * uAuroraAmt * 0.45 * smoothstep(0.0, 0.25, y) * (1.0 - smoothstep(0.6, 1.0, y));
+            col += acc * uAuroraAmt * 0.6 * smoothstep(0.0, 0.12, y);
           }
 
           // sun and moon discs

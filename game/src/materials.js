@@ -138,9 +138,13 @@ export function makeTerrainMaterial(trail) {
         }
 
         // ---- rock where the slope is too steep to hold snow
-        float rockN = p_fbm(wp.xz * 0.25 + wp.y * 0.1);
         float steep = 1.0 - Ng.y;
-        float rock = smoothstep(0.42, 0.56, steep + (vData.z - 0.5) * 0.12 + (rockN - 0.5) * 0.22);
+        float rock = 0.0;
+        float rockN = 0.5;
+        if (steep > 0.3) {
+          rockN = p_fbm(wp.xz * 0.25 + wp.y * 0.1);
+          rock = smoothstep(0.42, 0.56, steep + (vData.z - 0.5) * 0.12 + (rockN - 0.5) * 0.22);
+        }
         if (rock > 0.0) {
           float strata = p_vnoise(vec2(wp.y * 1.3, wp.x * 0.05 + wp.z * 0.05));
           vec3 rc = mix(vec3(0.045, 0.045, 0.06), vec3(0.13, 0.12, 0.14), strata * 0.7 + rockN * 0.3);
