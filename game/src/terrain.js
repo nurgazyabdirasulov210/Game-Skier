@@ -215,8 +215,10 @@ export function rockiness(x, z) {
 
 /** 0..1 forest density. */
 export function forestDensity(x, z) {
-  let d = noise2(x * 0.0042 + 100, z * 0.0042 - 50) * 0.75 + noise2(x * 0.017 - 9, z * 0.017 + 4) * 0.35;
-  d = smoothstep(-0.18, 0.42, d);
+  // forests in mid-sized patches (~100 m) with glades between; never fully bare, never a solid wall
+  let d = noise2(x * 0.0065 + 100, z * 0.0065 - 50) * 0.7 + noise2(x * 0.021 - 9, z * 0.021 + 4) * 0.4;
+  d = smoothstep(-0.3, 0.45, d);
+  d = 0.12 + d * 0.5;
   // lift corridors are cut through the forest
   const lc = liftCorridor(x, z);
   d *= smoothstep(7, 16, lc);
@@ -259,7 +261,7 @@ export function chunkObjects(cx, cz) {
       const z = z0 + (j + 0.1 + rnd() * 0.8) * step;
       const r = rnd();
       const dens = forestDensity(x, z);
-      if (r > dens * 0.62) continue;
+      if (r > dens * 0.7) continue;
       const nrm = normalAt(x, z, 0.8);
       if (nrm[1] < 0.8) continue;
       if (kickerZone(x, z)) continue;
