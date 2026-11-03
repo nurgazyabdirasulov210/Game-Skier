@@ -100,14 +100,25 @@ export class CameraRig {
       targetFov = 64;
     } else if (this.mode === 'fp') {
       skier.B.head.getWorldPosition(_a);
-      _b.set(0, 0.08, 0.12).applyQuaternion(P.quat);
+      _b.set(0, 0.16, -0.34).applyQuaternion(P.quat);
       this.pos.copy(_a).add(_b);
-      // взгляд по корпусу, немного вниз — видны лыжи
-      _c.set(0, -0.38, 1).normalize().applyQuaternion(P.quat);
-      if (P.mode === 'crash') _c.set(fx, -0.2, fz);
-      this.look.copy(this.pos).addScaledVector(_c, 10);
-      targetFov = 78 + Math.min(14, sp * 0.4);
-      this.roll += (-P.lean * 0.35 - this.roll) * k(8);
+      // стабилизированный взгляд: курс тела, наклон склона по курсу, чуть вниз — видны лыжи
+      const flipping = (P.mode === 'air' && (Math.abs(P.flip) > 0.25)) ;
+      if (flipping) {
+        _c.set(0, -0.3, 1).normalize().applyQuaternion(P.quat);
+        this.fpUp = (this.fpUp || new THREE.Vector3()).set(0, 1, 0).applyQuaternion(P.quat);
+      } else {
+        const by = P.yaw + P.spin;
+        const sx = Math.sin(by), sz = Math.cos(by);
+        const ahead = snowH(p.x + sx * 6, p.z + sz * 6) - snowH(p.x, p.z);
+        const pitch = Math.atan2(ahead, 6) * (P.mode === 'ride' ? 0.8 : 0.3) - 0.6;
+        _c.set(sx * Math.cos(pitch), Math.sin(pitch), sz * Math.cos(pitch));
+        this.fpUp = (this.fpUp || new THREE.Vector3()).set(0, 1, 0);
+      }
+      this.fpDir = (this.fpDir || _c.clone()).lerp(_c, k(10)).normalize();
+      this.look.copy(this.pos).addScaledVector(this.fpDir, 10);
+      targetFov = 80 + Math.min(14, sp * 0.4);
+      this.roll += (-P.lean * 0.3 - this.roll) * k(8);
     } else if (this.mode === 'drone') {
       this.droneT -= dt;
       const rel = _a.copy(this.drone).sub(p);
@@ -131,12 +142,9 @@ export class CameraRig {
 
     cam.position.copy(this.pos);
     cam.up.set(0, 1, 0);
-    if (this.mode === 'fp' && !menu && P.mode !== 'crash') {
-      _c.set(0, 1, 0).applyQuaternion(P.quat);
-      cam.up.copy(_c);
-    }
+    if (this.mode === 'fp' && !menu && P.mode !== 'crash' && this.fpUp) cam.up.copy(this.fpUp);
     cam.lookAt(this.look);
-    if (this.mode !== 'fp' || menu) cam.rotateZ(this.roll);
+    cam.rotateZ(this.roll);
     // тряска
     if (this.shakeAmt > 0.001) {
       const t = performance.now() * 0.001;

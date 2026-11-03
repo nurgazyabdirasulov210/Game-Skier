@@ -3,7 +3,7 @@ import { makeMaterial, mergeParts, M4 } from './materials.js';
 
 // Оригинальный персонаж: объёмная куртка, шапка с помпоном, маска, рюкзак.
 export const OUTFITS = {
-  lilac: { name: 'Сирень', jacket: '#8f74de', jacket2: '#efe9ff', pants: '#25294f', hat: '#ff6b5c', pom: '#ffe1d6', mitt: '#ff6b5c', lens: '#ffb347', ski: '#f4f1ea', ski2: '#ff6b5c', pack: '#3a3f6e', boot: '#20223a' },
+  lilac: { name: 'Сирень', jacket: '#8f74de', jacket2: '#efe9ff', pants: '#25294f', hat: '#ff6b5c', pom: '#ffe1d6', mitt: '#ff6b5c', lens: '#ffb347', ski: '#ff6b5c', ski2: '#f4f1ea', pack: '#3a3f6e', boot: '#20223a' },
   graphite: { name: 'Графит', jacket: '#3b404c', jacket2: '#b6e85a', pants: '#191b22', hat: '#b6e85a', pom: '#2a2e38', mitt: '#2a2e38', lens: '#7fd8ff', ski: '#b6e85a', ski2: '#191b22', pack: '#c96a3a', boot: '#111216' },
   terracotta: { name: 'Терракота', jacket: '#c85a3e', jacket2: '#f1e6cf', pants: '#ece2cc', hat: '#2f5d50', pom: '#f1e6cf', mitt: '#2f5d50', lens: '#ffd75e', ski: '#2f5d50', ski2: '#f1e6cf', pack: '#4a3a30', boot: '#3a2a22' },
 };

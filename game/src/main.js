@@ -297,13 +297,14 @@ async function boot() {
 
     // персонаж
     skier.setFirstPerson(rig.mode === 'fp' && state !== 'title' && player.mode !== 'crash');
+    player.fpView = rig.mode === 'fp';
     skier.update(rdt, player.animState());
     skier.decayPoles(rdt);
     if (state === 'play' && player.mode === 'ride' && Math.abs(player.yawRate) > 1.0 && Math.random() < rdt * 2) skier.plantPole(player.yawRate > 0 ? 'L' : 'R');
     tmpUp.set(0, 1, 0).applyQuaternion(player.quat);
     skier.root.quaternion.copy(player.quat);
     skier.root.position.copy(player.pos).addScaledVector(tmpUp, 0.85);
-    if (player.mode === 'ride' || player.mode === 'crash') skier.root.position.y += 0.06;
+    if (player.mode === 'ride' || player.mode === 'crash') skier.root.position.y += rig.mode === 'fp' && state === 'play' ? 0.66 : 0.06;
     glider.update(rdt, player.mode === 'glide', player.lean);
 
     // мир

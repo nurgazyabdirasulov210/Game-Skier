@@ -1,6 +1,21 @@
 import * as THREE from '../vendor/three.module.js';
 import { G, GLSL_UNIFORMS, FRAG_HEAD } from './shaderlib.js';
 
+function mergeVertices(g) {
+  // склеиваем совпадающие вершины, чтобы смещение не рвало поверхность
+  const P = g.attributes.position, map = new Map(), pos = [], idx = [];
+  for (let i = 0; i < P.count; i++) {
+    const k = P.getX(i).toFixed(4) + ',' + P.getY(i).toFixed(4) + ',' + P.getZ(i).toFixed(4);
+    let j = map.get(k);
+    if (j === undefined) { j = pos.length / 3; map.set(k, j); pos.push(P.getX(i), P.getY(i), P.getZ(i)); }
+    idx.push(j);
+  }
+  const out = new THREE.BufferGeometry();
+  out.setAttribute('position', new THREE.Float32BufferAttribute(pos, 3));
+  out.setIndex(idx);
+  return out;
+}
+
 // GPU-частицы: траектория считается аналитически (гравитация + линейное сопротивление).
 
 const BALLISTIC = /* glsl */`
@@ -42,9 +57,9 @@ void main(){
   float sh = shadowAt(vWorld, n);
   float ndl = dot(n, uSunDir);
   float d = clamp((ndl + 0.5) / 1.5, 0.0, 1.0);
-  vec3 col = vec3(0.94, 0.96, 1.0) * (ambientAt(n) * 1.05 + uSunCol * d * mix(0.35, 1.0, sh));
+  vec3 col = vec3(0.94, 0.96, 1.0) * (ambientAt(n) * 1.05 + uSunCol * d * mix(0.4, 1.0, sh));
   vec3 V = normalize(uCamPos - vWorld);
-  col += uSkyAmb * pow(1.0 - abs(dot(n, V)), 3.0) * 0.35;
+  col += uSkyAmb * pow(1.0 - abs(dot(n, V)), 2.0) * 0.3;
   gl_FragColor = vec4(fogApply(col, vWorld), 1.0);
 }`;
 
@@ -146,10 +161,17 @@ export class Particles {
   constructor(scene, { clumps = 900, mist = 260, flakes = 2500 } = {}) {
     const U = Object.assign({}, G, { uNow: { value: 0 } });
     this.U = U;
-    const clumpGeo = new THREE.IcosahedronGeometry(1, 0);
+    // мягкий ком: икосаэдр 1-го уровня с «шарообразными» нормалями и лёгкой неровностью
+    const clumpGeo = mergeVertices(new THREE.IcosahedronGeometry(1, 1));
     const P = clumpGeo.attributes.position;
-    for (let i = 0; i < P.count; i++) { const k = 0.8 + ((i * 7919) % 13) / 30; P.setXYZ(i, P.getX(i) * k, P.getY(i) * k * 0.85, P.getZ(i) * k); }
-    clumpGeo.computeVertexNormals();
+    const nrm = new Float32Array(P.count * 3);
+    for (let i = 0; i < P.count; i++) {
+      const x = P.getX(i), y = P.getY(i), z = P.getZ(i);
+      nrm[i * 3] = x; nrm[i * 3 + 1] = y; nrm[i * 3 + 2] = z;
+      const k = 0.82 + (((i * 7919) % 17) / 17) * 0.3;
+      P.setXYZ(i, x * k, y * k * 0.8, z * k);
+    }
+    clumpGeo.setAttribute('normal', new THREE.BufferAttribute(nrm, 3));
     this.clumps = new Emitter(scene, clumpGeo, new THREE.ShaderMaterial({ uniforms: U, vertexShader: CLUMP_VERT, fragmentShader: CLUMP_FRAG }), clumps);
     const quad = new THREE.BufferGeometry();
     quad.setAttribute('position', new THREE.BufferAttribute(new Float32Array([-1, -1, 0, 1, -1, 0, 1, 1, 0, -1, 1, 0]), 3));

@@ -159,16 +159,17 @@ export class Player {
       const out = (1.2 + this.carve * 3 + this.brake * 4) * (0.4 + Math.random());
       _b.copy(this.vel).multiplyScalar(0.25 + Math.random() * 0.3)
         .addScaledVector(_l, turnSide * out * (Math.random() < 0.8 ? 1 : -0.5))
-        .addScaledVector(this.n, 1.4 + Math.random() * 3.2 + this.carve * 1.2);
-      const size = 0.06 + Math.pow(Math.random(), 2) * (0.28 + this.carve * 0.12);
+        .addScaledVector(this.n, 1.0 + Math.random() * 2.0 + this.carve * 1.4);
+      const size = 0.05 + Math.pow(Math.random(), 2.4) * (0.22 + this.carve * 0.1);
       fx.clump(_a, _b, size, 0.6 + Math.random() * 0.8, 1.2 + Math.random());
     }
     // «носовая волна»: пухляк переваливается через носки лыж в стороны
-    const bow = sp * 1.6 * dt;
+    const bow = this.fpView ? 0 : sp * 1.6 * dt;
     let nb = Math.floor(bow) + (Math.random() < bow % 1 ? 1 : 0);
     for (let i = 0; i < nb; i++) {
       const side = Math.random() < 0.5 ? -1 : 1;
-      _a.copy(this.pos).addScaledVector(_f, 0.5 + Math.random() * 0.4).addScaledVector(_l, side * (0.25 + Math.random() * 0.2));
+      const lat = this.fpView ? 0.75 + Math.random() * 0.3 : 0.25 + Math.random() * 0.2;
+      _a.copy(this.pos).addScaledVector(_f, this.fpView ? 0.1 : 0.5 + Math.random() * 0.4).addScaledVector(_l, side * lat);
       _a.y += POWDER * 0.9;
       _b.copy(this.vel).multiplyScalar(0.55 + Math.random() * 0.2).addScaledVector(_l, side * (0.8 + Math.random() * 1.6)).addScaledVector(this.n, 0.8 + Math.random() * 1.6);
       fx.clump(_a, _b, 0.05 + Math.random() * 0.14, 0.45 + Math.random() * 0.4, 2.0);
@@ -177,7 +178,7 @@ export class Player {
     if (Math.random() < mr) {
       _a.copy(this.pos).addScaledVector(_f, -0.4); _a.y += POWDER * 0.8;
       _b.copy(this.vel).multiplyScalar(0.3).addScaledVector(_l, turnSide * 2 * this.carve).addScaledVector(this.n, 1.2);
-      fx.puff(_a, _b, 0.8 + Math.random() * 0.9 + this.carve * 0.4, 0.22 + this.carve * 0.1, 1.2 + Math.random());
+      fx.puff(_a, _b, 0.8 + Math.random() * 0.9 + this.carve * 0.4, 0.14 + this.carve * 0.08, 1.2 + Math.random());
     }
   }
 
