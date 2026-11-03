@@ -1,0 +1,217 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#141a4a">
+<meta name="description" content="ЦЕЛИНА — фрирайд по нетронутому снегу: глубокие колеи, смена времени суток, трюки и параплан.">
+<title>ЦЕЛИНА — фрирайд</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@600;800&family=Manrope:wght@600;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #fbfaff;
+    --soft: rgba(251, 250, 255, .72);
+    --glass: rgba(18, 22, 60, .38);
+    --line: rgba(255, 255, 255, .18);
+    --accent: #ffd36e;
+    --accent2: #8ef0ff;
+    --hot: #ff7a59;
+    --bad: #ff9d8a;
+    --ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --display: 'Unbounded', 'Manrope', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1236; color: var(--ink); font-family: var(--ui); }
+  body { touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas#c { position: fixed; inset: 0; display: block; width: 100%; height: 100%; }
+  button { font: inherit; color: inherit; }
+
+  /* загрузка */
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; z-index: 40; transition: opacity .8s;
+    background: radial-gradient(120% 90% at 50% 15%, #4b58b8 0%, #1a2160 55%, #0d1236 100%); }
+  #loading.gone { opacity: 0; pointer-events: none; }
+  #loading .box { width: min(340px, 80vw); text-align: center; }
+  #loading .logo { font-family: var(--display); font-weight: 800; font-size: 30px; letter-spacing: .14em; }
+  #loading .track { margin-top: 20px; height: 3px; background: rgba(255,255,255,.15); border-radius: 3px; overflow: hidden; }
+  #loadbar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), #fff); transition: width .25s; }
+  #loadmsg { margin-top: 12px; font-size: 13px; color: var(--soft); }
+
+  /* титульный экран */
+  #title { position: fixed; inset: 0; z-index: 20; display: grid; grid-template-rows: 1fr auto; padding: max(6vh, env(safe-area-inset-top)) 20px max(4vh, env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(10,14,44,.55) 0%, rgba(10,14,44,0) 34%, rgba(10,14,44,0) 55%, rgba(10,14,44,.72) 100%);
+    transition: opacity .7s, transform .7s; }
+  #title.gone { opacity: 0; pointer-events: none; transform: scale(1.03); }
+  #title .head { text-align: center; }
+  #title h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(48px, 11vw, 140px); letter-spacing: .05em; line-height: .95;
+    background: linear-gradient(180deg, #ffffff 0%, #ffffff 50%, #d7ddff 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+    filter: drop-shadow(0 8px 36px rgba(20, 30, 110, .5)); }
+  #title .tag { margin-top: 10px; font-weight: 800; letter-spacing: .34em; text-transform: uppercase; font-size: clamp(10px, 1.5vw, 14px); color: var(--soft); }
+  #title .panel { justify-self: center; width: min(760px, 100%); display: grid; gap: 14px; }
+  .opts { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+  .opt { background: var(--glass); border: 1px solid var(--line); border-radius: 14px; padding: 10px 12px; backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px); min-width: 0; }
+  .opt .lbl { font-size: 10px; letter-spacing: .24em; text-transform: uppercase; color: var(--soft); font-weight: 800; }
+  .opt .row { margin-top: 8px; display: flex; gap: 6px; flex-wrap: wrap; }
+  .chip { border: 1px solid var(--line); background: rgba(255,255,255,.06); border-radius: 999px; padding: 5px 10px; font-size: 12px; font-weight: 800; cursor: pointer; }
+  .chip.sel { background: #fff; color: #1a1f55; border-color: #fff; }
+  .sw { width: 30px; height: 30px; border-radius: 50%; border: 2px solid transparent; cursor: pointer; padding: 0; position: relative; overflow: hidden; }
+  .sw.sel { border-color: #fff; box-shadow: 0 0 0 3px rgba(255,255,255,.25); }
+  .sw i { position: absolute; inset: 0; }
+  #play { justify-self: center; font-family: var(--display); font-weight: 800; font-size: 18px; letter-spacing: .14em; text-transform: uppercase; padding: 16px 44px; border-radius: 999px; border: 0; cursor: pointer;
+    background: linear-gradient(180deg, #fff, #dfe4ff); color: #1a1f55; box-shadow: 0 10px 40px rgba(30, 40, 140, .45); }
+  #play:active { transform: scale(.97); }
+  .keys { display: flex; gap: 8px 18px; flex-wrap: wrap; justify-content: center; font-size: 12px; color: var(--soft); }
+  .keys b { display: inline-block; min-width: 22px; padding: 2px 6px; margin-right: 5px; border-radius: 6px; background: rgba(255,255,255,.16); text-align: center; color: #fff; }
+  body.touch .keys.desk { display: none; }
+  body:not(.touch) .keys.mob { display: none; }
+  @media (max-width: 620px) { .opts { grid-template-columns: 1fr; } #title .panel { gap: 10px; } }
+
+  /* HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; opacity: 0; transition: opacity .5s; text-shadow: 0 1px 10px rgba(10, 14, 60, .5); }
+  #hud.on { opacity: 1; }
+  #hud.hidden { opacity: 0 !important; }
+  #scorecard { position: absolute; left: max(16px, env(safe-area-inset-left)); top: max(14px, env(safe-area-inset-top)); display: grid; gap: 2px; }
+  #scorecard .row { display: flex; align-items: center; gap: 8px; }
+  #scorecard svg { width: 16px; height: 16px; opacity: .9; }
+  #total { font-family: var(--display); font-weight: 800; font-size: 22px; font-variant-numeric: tabular-nums; }
+  #best { font-weight: 800; font-size: 14px; color: var(--soft); font-variant-numeric: tabular-nums; }
+  #meter { position: absolute; right: max(16px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top)); text-align: right; }
+  #speed { font-family: var(--display); font-weight: 800; font-size: 26px; font-variant-numeric: tabular-nums; }
+  #meter small { font-size: 10px; letter-spacing: .2em; color: var(--soft); font-weight: 800; margin-left: 4px; }
+  #tod { margin-top: 2px; font-size: 10px; letter-spacing: .3em; text-transform: uppercase; color: var(--soft); font-weight: 800; }
+  body.touch #meter { top: max(14px, env(safe-area-inset-top)); right: max(64px, env(safe-area-inset-right)); }
+
+  #combo { position: absolute; left: 50%; bottom: max(22px, env(safe-area-inset-bottom)); transform: translate(-50%, 14px); display: flex; align-items: center; gap: 10px; opacity: 0; transition: opacity .25s, transform .25s; }
+  #combo.on { opacity: 1; transform: translate(-50%, 0); }
+  #combo .ring { position: relative; width: 48px; height: 48px; }
+  #combo svg { width: 48px; height: 48px; transform: rotate(-90deg); }
+  #combo circle { fill: none; stroke-width: 3.5; }
+  #combo .bg { stroke: rgba(255,255,255,.2); }
+  #comboRing { stroke: #fff; stroke-linecap: round; stroke-dasharray: 126; transition: stroke-dashoffset .12s linear; }
+  #comboMult { --heat: 0; position: absolute; inset: 0; display: grid; place-items: center; font-family: var(--display); font-weight: 800; font-size: 15px;
+    color: color-mix(in srgb, #fff calc((1 - var(--heat)) * 100%), var(--hot)); }
+  #comboMult.pop { animation: pop .35s cubic-bezier(.2, 1.8, .4, 1); }
+  #comboPts { font-family: var(--display); font-weight: 800; font-size: clamp(28px, 5vw, 42px); font-variant-numeric: tabular-nums; min-width: 3ch; }
+
+  #labels { position: absolute; inset: 0; overflow: hidden; }
+  .flt { position: absolute; left: 0; top: 0; display: flex; align-items: center; gap: 5px; white-space: nowrap; font-weight: 800; will-change: transform, opacity; }
+  .flt i { width: 15px; height: 15px; display: inline-block; opacity: .9; }
+  .flt i svg { width: 100%; height: 100%; display: block; }
+  .flt b { font-family: var(--display); font-size: 17px; font-style: italic; }
+  .flt span { font-size: 12px; color: var(--soft); }
+  .flt.k-flip b, .flt.k-spin b, .flt.k-drop b { color: var(--accent); }
+  .flt.k-arch b, .flt.k-grind b, .flt.k-glide b { color: var(--accent2); }
+
+  #banner { position: absolute; left: 50%; top: 22%; transform: translate(-50%, -10px); text-align: center; opacity: 0; transition: opacity .3s, transform .3s; }
+  #banner.on { opacity: 1; transform: translate(-50%, 0); }
+  #bannerA { font-family: var(--display); font-weight: 800; font-size: clamp(22px, 4vw, 34px); letter-spacing: .04em; }
+  #bannerB { margin-top: 4px; font-weight: 800; font-size: 16px; color: var(--accent); }
+  #banner.hot #bannerA { color: var(--accent); }
+  #banner.bad #bannerA { color: #fff; } #banner.bad #bannerB { color: var(--bad); }
+  #hint { position: absolute; left: 50%; top: 14%; transform: translateX(-50%); font-size: 13px; font-weight: 800; color: var(--soft); opacity: 0; transition: opacity .4s; text-align: center; width: 90vw; }
+  #hint.on { opacity: 1; }
+  #camName { position: absolute; left: 50%; top: max(16px, env(safe-area-inset-top)); transform: translateX(-50%); font-size: 11px; letter-spacing: .25em; text-transform: uppercase; font-weight: 800; opacity: 0; }
+  #camName.flash { animation: flash 1.6s ease; }
+  @keyframes flash { 0% { opacity: 0 } 15%, 70% { opacity: .85 } 100% { opacity: 0 } }
+  @keyframes pop { 0% { transform: scale(.6) } 100% { transform: scale(1) } }
+
+  /* сенсорное управление */
+  #touch { position: fixed; inset: 0; z-index: 12; display: none; }
+  body.touch.playing #touch { display: block; }
+  #stickzone { position: absolute; left: 0; top: 18%; bottom: 0; width: 55%; }
+  #stick { position: absolute; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(20, 26, 70, .18); opacity: 0; transition: opacity .15s; pointer-events: none; }
+  #stick.on { opacity: 1; }
+  #knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; margin: -26px 0 0 -26px; border-radius: 50%; background: rgba(255,255,255,.55); }
+  .tb { position: absolute; border-radius: 50%; border: 2px solid rgba(255,255,255,.45); background: rgba(20, 26, 70, .28); backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+    display: grid; place-items: center; font-weight: 800; font-size: 11px; letter-spacing: .08em; text-transform: uppercase; color: #fff; }
+  .tb.down { background: rgba(255,255,255,.45); color: #1a1f55; }
+  #bJump { width: 92px; height: 92px; right: max(22px, env(safe-area-inset-right)); bottom: max(28px, env(safe-area-inset-bottom)); }
+  #bGrab { width: 66px; height: 66px; right: max(126px, calc(env(safe-area-inset-right) + 104px)); bottom: max(34px, env(safe-area-inset-bottom)); }
+  #bGlide { width: 62px; height: 62px; right: max(40px, env(safe-area-inset-right)); bottom: max(136px, calc(env(safe-area-inset-bottom) + 112px)); }
+  #bCam { width: 46px; height: 46px; right: max(130px, calc(env(safe-area-inset-right) + 110px)); bottom: max(118px, calc(env(safe-area-inset-bottom) + 96px)); font-size: 9px; }
+  #bPause { width: 40px; height: 40px; right: max(14px, env(safe-area-inset-right)); top: max(14px, env(safe-area-inset-top)); font-size: 14px; }
+
+  /* пауза */
+  #pause { position: fixed; inset: 0; z-index: 30; display: none; place-items: center; background: rgba(12, 16, 48, .55); backdrop-filter: blur(8px); -webkit-backdrop-filter: blur(8px); }
+  #pause.on { display: grid; }
+  #pause .card { width: min(380px, 90vw); display: grid; gap: 10px; text-align: center; }
+  #pause h2 { margin: 0 0 6px; font-family: var(--display); font-weight: 800; letter-spacing: .1em; }
+  #pause button { padding: 13px 16px; border-radius: 14px; border: 1px solid var(--line); background: rgba(255,255,255,.08); font-weight: 800; cursor: pointer; }
+  #pause button:hover { background: rgba(255,255,255,.16); }
+  #pause button.main { background: #fff; color: #1a1f55; }
+  #stats { font-size: 13px; color: var(--soft); margin-top: 6px; }
+  #err { position: fixed; inset: 0; z-index: 50; display: none; place-items: center; padding: 24px; text-align: center; background: #0d1236; }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="loading"><div class="box"><div class="logo">ЦЕЛИНА</div><div class="track"><div id="loadbar"></div></div><div id="loadmsg">Насыпаем снег…</div></div></div>
+
+<div id="title">
+  <div class="head">
+    <h1>ЦЕЛИНА</h1>
+    <div class="tag">фрирайд по нетронутому снегу</div>
+  </div>
+  <div class="panel">
+    <div class="opts">
+      <div class="opt"><div class="lbl">Райдер</div><div class="row" id="optOutfit"></div></div>
+      <div class="opt"><div class="lbl">Время суток</div><div class="row" id="optTime"></div></div>
+      <div class="opt"><div class="lbl">Графика</div><div class="row" id="optQuality"></div></div>
+    </div>
+    <button id="play">Поехали</button>
+    <div class="keys desk">
+      <span><b>A</b><b>D</b>поворот · винт</span><span><b>W</b>в стойку · сальто</span><span><b>S</b>тормоз · назад</span>
+      <span><b>␣</b>держать — прыжок</span><span><b>Shift</b>граб</span><span><b>F</b>параплан</span>
+      <span><b>C</b>камера</span><span><b>T</b>время</span><span><b>R</b>подняться</span>
+    </div>
+    <div class="keys mob">
+      <span>Левая половина — стик: поворот, вверх — стойка/сальто</span><span>Справа — прыжок, граб, крыло</span>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="scorecard">
+    <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M12 2v20M3.3 7l17.4 10M3.3 17L20.7 7"/></svg><span id="total">0</span></div>
+    <div class="row"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linejoin="round"><path d="M2 20l7-12 4 6 3-4 6 10z"/></svg><span id="best">0</span></div>
+  </div>
+  <div id="meter"><div><span id="speed">0</span><small>км/ч</small></div><div id="tod">день</div></div>
+  <div id="camName"></div>
+  <div id="labels"></div>
+  <div id="banner"><div id="bannerA"></div><div id="bannerB"></div></div>
+  <div id="hint"></div>
+  <div id="combo">
+    <div class="ring"><svg viewBox="0 0 48 48"><circle class="bg" cx="24" cy="24" r="20"/><circle id="comboRing" cx="24" cy="24" r="20"/></svg><div id="comboMult">×1</div></div>
+    <div id="comboPts">0</div>
+  </div>
+</div>
+
+<div id="touch">
+  <div id="stickzone"></div>
+  <div id="stick"><div id="knob"></div></div>
+  <div class="tb" id="bGrab">граб</div>
+  <div class="tb" id="bJump">прыжок</div>
+  <div class="tb" id="bGlide">крыло</div>
+  <div class="tb" id="bCam">кам</div>
+  <div class="tb" id="bPause">❚❚</div>
+</div>
+
+<div id="pause">
+  <div class="card">
+    <h2>ПАУЗА</h2>
+    <button class="main" id="pResume">Продолжить</button>
+    <button id="pCam">Сменить камеру</button>
+    <button id="pTime">Время суток: <span id="pTimeName"></span></button>
+    <button id="pRespawn">Начать с новой вершины</button>
+    <button id="pMute">Звук: вкл</button>
+    <button id="pTitle">В меню</button>
+    <div id="stats"></div>
+  </div>
+</div>
+<div id="err"></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
