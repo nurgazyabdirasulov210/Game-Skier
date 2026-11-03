@@ -48,7 +48,12 @@ uniform float uBloomStr; uniform float uExposure; uniform float uSpeed; uniform 
 uniform float uTime; uniform vec2 uRes; uniform float uFade; uniform vec3 uFadeCol; uniform float uSat;
 uniform vec2 uBlurCenter;
 varying vec2 vUv;
-vec3 aces(vec3 x){ return clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0); }
+// мягкая кривая Рейнхарда с точкой белого: снег остаётся белым, а полутона — контрастными
+vec3 tonemap(vec3 x){
+  const float k = 0.5;
+  vec3 hi = k + (1.0 - k) * (1.0 - exp(-(x - k) / (1.0 - k)));
+  return mix(x, hi, step(k, x));
+}
 float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
 void main(){
   vec2 uv = vUv;
@@ -62,7 +67,7 @@ void main(){
     c = acc / 7.0;
   }
   c += texture2D(uBloom, uv).rgb * uBloomStr;
-  c = aces(c * uExposure);
+  c = tonemap(c * uExposure);
   float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
   c = mix(vec3(l), c, uSat);
   vec2 q = uv - 0.5;
@@ -94,7 +99,7 @@ export class Post {
     this.mDown = M(DOWN, { uSrc: { value: null }, uHp: { value: new THREE.Vector2() } });
     this.mUp = M(UP, { uSrc: { value: null }, uBase: { value: null }, uHp: { value: new THREE.Vector2() } });
     this.mComp = M(COMPOSITE, {
-      uScene: { value: null }, uBloom: { value: null }, uBloomStr: { value: 0.42 }, uExposure: { value: 0.74 },
+      uScene: { value: null }, uBloom: { value: null }, uBloomStr: { value: 0.42 }, uExposure: { value: 0.85 },
       uSpeed: { value: 0 }, uVig: { value: 0.55 }, uTime: { value: 0 }, uRes: { value: new THREE.Vector2(1, 1) },
       uFade: { value: 0 }, uFadeCol: { value: new THREE.Color(1, 1, 1) }, uSat: { value: 1.18 },
       uBlurCenter: { value: new THREE.Vector2(0.5, 0.5) },

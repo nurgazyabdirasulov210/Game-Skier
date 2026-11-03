@@ -56,8 +56,8 @@ uniform vec4 uShadowInfo; uniform vec2 uShadowBias;
 
 vec3 skyColor(vec3 v){
   float y = v.y;
-  float t = pow(clamp(y + 0.03, 0.0, 1.0), 0.55);
-  vec3 c = mix(uSkyHor, uSkyTop, smoothstep(0.0, 1.0, t));
+  float t = pow(clamp(y + 0.02, 0.0, 1.0), 0.45);
+  vec3 c = mix(uSkyHor, uSkyTop, t);
   float sd = max(dot(v, uSunDisc), 0.0);
   float glow = pow(sd, 4.0) * 0.38 + pow(sd, 28.0) * 0.6;
   c += uGlowCol * glow * (1.0 - 0.55 * clamp(y, 0.0, 1.0));

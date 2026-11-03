@@ -22,9 +22,9 @@ const $ = (id) => document.getElementById(id);
 const sleep = (ms) => new Promise((r) => setTimeout(r, ms));
 
 const QUALITY = {
-  low: { name: 'Низкая', dpr: 1.0, N: 96, s0: 0.34, levels: 7, sh0: 1536, sh1: 1024, cascades: 1, half0: 34, trailRes: 512, trailSize: 128, msaa: 2, bloom: true, radius: 170, clumps: 600, mist: 160, flakes: 1200 },
-  medium: { name: 'Средняя', dpr: 1.5, N: 112, s0: 0.28, levels: 7, sh0: 2048, sh1: 1024, cascades: 2, half0: 26, trailRes: 1024, trailSize: 150, msaa: 4, bloom: true, radius: 210, clumps: 800, mist: 220, flakes: 2000 },
-  high: { name: 'Высокая', dpr: 2.0, N: 128, s0: 0.25, levels: 7, sh0: 2048, sh1: 2048, cascades: 2, half0: 26, trailRes: 1024, trailSize: 160, msaa: 4, bloom: true, radius: 240, clumps: 900, mist: 260, flakes: 2600 },
+  low: { name: 'Низкая', dpr: 1.0, N: 96, s0: 0.34, levels: 7, sh0: 1536, sh1: 1024, cascades: 1, half0: 34, trailRes: 512, trailSize: 128, msaa: 2, bloom: true, radius: 170, clumps: 800, mist: 160, flakes: 1200 },
+  medium: { name: 'Средняя', dpr: 1.5, N: 112, s0: 0.28, levels: 7, sh0: 2048, sh1: 1024, cascades: 2, half0: 26, trailRes: 1024, trailSize: 150, msaa: 4, bloom: true, radius: 210, clumps: 1100, mist: 240, flakes: 2000 },
+  high: { name: 'Высокая', dpr: 2.0, N: 128, s0: 0.25, levels: 7, sh0: 2048, sh1: 2048, cascades: 2, half0: 26, trailRes: 1024, trailSize: 160, msaa: 4, bloom: true, radius: 240, clumps: 1400, mist: 300, flakes: 2600 },
 };
 const TIME_OPTS = [['cycle', 'Цикл'], ['dawn', 'Рассвет'], ['day', 'День'], ['sunset', 'Закат'], ['night', 'Ночь']];
 
@@ -217,6 +217,7 @@ async function boot() {
     const x = (Math.random() - 0.5) * 6000, z = player.pos.z + 300 + Math.random() * 600;
     const s = pickSpawn(x, z);
     spawnAt(s.x, s.z);
+    post.mComp.uniforms.uFade.value = 1;
     player.vel.set(Math.sin(player.yaw) * 3, 0, Math.cos(player.yaw) * 3);
   }
 
@@ -228,7 +229,7 @@ async function boot() {
   let frameAvg = 16, perfT = 0;
   const tmpUp = new THREE.Vector3(), viewDir = new THREE.Vector3();
   const pin = { steer: 0, up: 0, down: 0, jump: false, grab: false };
-  window.__game = { player, day, rig, score, props, hud, input, skier, renderer, setState: (s) => { state = s; }, startGame };
+  window.__game = { player, day, rig, score, props, hud, input, skier, renderer, spawnAt, trail, setState: (s) => { state = s; }, startGame };
 
   window.__frames = 0;
   // тестовый хук: детерминированная прокрутка физики
@@ -324,7 +325,7 @@ async function boot() {
     const pu = post.mComp.uniforms;
     const spd = player.speed;
     pu.uSpeed.value += ((state === 'play' ? Math.max(0, Math.min(1, (spd - 13) / 22)) * (rig.mode === 'fp' ? 1.2 : 0.85) : 0) - pu.uSpeed.value) * 0.08;
-    pu.uFade.value *= 0.9;
+    pu.uFade.value *= Math.exp(-rdt * 3);
     post.begin();
     renderer.render(scene, camera);
     post.end(time);

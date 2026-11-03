@@ -68,8 +68,7 @@ void main(){
 
   float sh = shadowAt(vWorld, n);
   float ndl = dot(n, uSunDir);
-  float diff = clamp((ndl + 0.3) / 1.3, 0.0, 1.0);
-  diff = diff * diff * (3.0 - 2.0 * diff);
+  float diff = clamp((ndl + 0.18) / 1.18, 0.0, 1.0);
   float lit = diff * sh;
 
   vec3 albedo = vec3(0.93, 0.95, 1.0);

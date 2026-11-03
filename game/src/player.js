@@ -149,7 +149,7 @@ export class Player {
   spray(dt, sp, vl) {
     if (sp < 2) return;
     const fx = this.fx;
-    const rate = (sp * 3.2 + this.carve * 40 + this.brake * 60) * dt;
+    const rate = (sp * 4 + this.carve * 55 + this.brake * 70) * dt;
     let n = Math.floor(rate) + (Math.random() < rate % 1 ? 1 : 0);
     const turnSide = Math.sign(this.yawRate) || 1;
     for (let i = 0; i < n; i++) {
@@ -160,8 +160,18 @@ export class Player {
       _b.copy(this.vel).multiplyScalar(0.25 + Math.random() * 0.3)
         .addScaledVector(_l, turnSide * out * (Math.random() < 0.8 ? 1 : -0.5))
         .addScaledVector(this.n, 1.4 + Math.random() * 3.2 + this.carve * 1.2);
-      const size = 0.05 + Math.pow(Math.random(), 2.2) * (0.22 + this.carve * 0.1);
+      const size = 0.06 + Math.pow(Math.random(), 2) * (0.28 + this.carve * 0.12);
       fx.clump(_a, _b, size, 0.6 + Math.random() * 0.8, 1.2 + Math.random());
+    }
+    // «носовая волна»: пухляк переваливается через носки лыж в стороны
+    const bow = sp * 1.6 * dt;
+    let nb = Math.floor(bow) + (Math.random() < bow % 1 ? 1 : 0);
+    for (let i = 0; i < nb; i++) {
+      const side = Math.random() < 0.5 ? -1 : 1;
+      _a.copy(this.pos).addScaledVector(_f, 0.5 + Math.random() * 0.4).addScaledVector(_l, side * (0.25 + Math.random() * 0.2));
+      _a.y += POWDER * 0.9;
+      _b.copy(this.vel).multiplyScalar(0.55 + Math.random() * 0.2).addScaledVector(_l, side * (0.8 + Math.random() * 1.6)).addScaledVector(this.n, 0.8 + Math.random() * 1.6);
+      fx.clump(_a, _b, 0.05 + Math.random() * 0.14, 0.45 + Math.random() * 0.4, 2.0);
     }
     const mr = (sp * 0.9 + this.carve * 10 + this.brake * 14) * dt;
     if (Math.random() < mr) {
@@ -215,10 +225,7 @@ export class Player {
     this.airPeak = Math.max(this.airPeak, p.y);
 
     // параплан
-    if (this.wantGlide) {
-      this.wantGlide = false;
-      if (p.y - heightAt(p.x, p.z) > 2.2 && this.airTime > 0.2) { this.startGlide(); return; }
-    }
+    if (this.wantGlide && p.y - heightAt(p.x, p.z) > 2.0 && this.airTime > 0.15) { this.wantGlide = false; this.startGlide(); return; }
     if (this.tryGrind()) return;
     const h = heightAt(p.x, p.z);
     if (p.y <= h) this.land(h);
@@ -227,6 +234,7 @@ export class Player {
   land(h) {
     const p = this.pos, v = this.vel;
     p.y = h;
+    this.wantGlide = false;
     normalAt(p.x, p.z, _n);
     this.n.copy(_n);
     const impact = Math.max(0, -v.dot(_n));
@@ -302,7 +310,8 @@ export class Player {
     this.yaw += this.yawRate * dt;
     const dive = inp.up - inp.down;
     const fwd = 13 + dive * 5;
-    const sink = 1.7 + dive * 2.2 - (inp.down > 0.3 ? 0.4 : 0);
+    // крыло держит недолго: со временем снижение ускоряется
+    const sink = 2.4 + Math.max(0, this.glideT - 4) * 1.3 + dive * 2.4 - (inp.down > 0.3 ? 0.5 : 0);
     const k = 1 - Math.exp(-dt * 1.6);
     v.x += (Math.sin(this.yaw) * fwd - v.x) * k;
     v.z += (Math.cos(this.yaw) * fwd - v.z) * k;
@@ -336,12 +345,14 @@ export class Player {
       const ry = r.ay + (r.by - r.ay) * t;
       if (p.y < ry - 0.35 || p.y > ry + 0.6) continue;
       // направление по движению
-      const L = Math.sqrt(L2);
-      let dirx = dx / L, dirz = dz / L, diry = (r.by - r.ay) / L;
+      const dy = r.by - r.ay;
+      const L = Math.sqrt(L2 + dy * dy);
+      const dirx = dx / L, dirz = dz / L, diry = dy / L;
       const along = v.x * dirx + v.z * dirz;
       if (Math.abs(along) < 2) continue;
       const s = Math.sign(along);
       this.mode = 'grind';
+      this.wantGlide = false;
       this.grind = { it, t, dir: s, L };
       this.grindDist = 0;
       const spd = Math.max(4, Math.abs(along));
