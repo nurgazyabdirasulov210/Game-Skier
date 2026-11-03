@@ -1,0 +1,213 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
+<meta name="theme-color" content="#1b2350">
+<title>ПОРОША — фрирайд</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@500;800&family=Manrope:wght@500;700;800&display=swap" rel="stylesheet">
+<style>
+  :root {
+    --ink: #fdfbff;
+    --shade: rgba(16, 20, 48, 0.42);
+    --accent: #ffcf6e;
+    --accent2: #7ff3ff;
+    --hot: #ff7a59;
+    --ui: 'Manrope', system-ui, -apple-system, 'Segoe UI', Roboto, sans-serif;
+    --display: 'Unbounded', 'Manrope', system-ui, sans-serif;
+  }
+  * { box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b0f26; color: var(--ink); font-family: var(--ui); }
+  body { touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas#c { position: fixed; inset: 0; display: block; }
+
+  /* ---------------- loading */
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: radial-gradient(120% 90% at 50% 20%, #3b4aa0 0%, #141a44 60%, #0b0f26 100%); z-index: 30; transition: opacity .8s; }
+  #loading.gone { opacity: 0; pointer-events: none; }
+  #loading .box { width: min(360px, 80vw); text-align: center; }
+  #loading .logo { font-family: var(--display); font-weight: 800; font-size: 34px; letter-spacing: .12em; }
+  #loading .track { margin-top: 22px; height: 4px; background: rgba(255,255,255,.15); border-radius: 4px; overflow: hidden; }
+  #loadbar { height: 100%; width: 0; background: linear-gradient(90deg, var(--accent2), #fff); transition: width .2s; }
+  #loadmsg { margin-top: 12px; font-size: 13px; opacity: .7; }
+
+  /* ---------------- title */
+  #title { position: fixed; inset: 0; z-index: 20; display: flex; flex-direction: column; align-items: center; justify-content: space-between; padding: 9vh 16px 7vh; transition: opacity .9s, transform .9s; cursor: pointer;
+           background: linear-gradient(180deg, rgba(10,14,40,.55) 0%, rgba(10,14,40,0) 38%, rgba(10,14,40,0) 62%, rgba(10,14,40,.6) 100%); }
+  #title.gone { opacity: 0; pointer-events: none; transform: scale(1.04); }
+  #title h1 { margin: 0; font-family: var(--display); font-weight: 800; font-size: clamp(54px, 12vw, 150px); letter-spacing: .06em; line-height: .9;
+              background: linear-gradient(180deg, #fff 0%, #fff 55%, #cfe0ff 100%); -webkit-background-clip: text; background-clip: text; color: transparent;
+              filter: drop-shadow(0 6px 30px rgba(30, 40, 120, .45)); }
+  #title .tag { margin-top: 14px; font-weight: 700; letter-spacing: .38em; text-transform: uppercase; font-size: clamp(11px, 1.6vw, 15px); opacity: .9; text-align: center; }
+  #title .press { font-weight: 800; letter-spacing: .2em; font-size: 14px; text-transform: uppercase; animation: pulse 1.8s ease-in-out infinite; text-align: center; }
+  #title .keys { margin-top: 18px; display: flex; gap: 10px 22px; flex-wrap: wrap; justify-content: center; font-size: 13px; opacity: .85; max-width: 760px; }
+  #title .keys b { display: inline-block; min-width: 24px; padding: 2px 7px; margin-right: 6px; border-radius: 6px; background: rgba(255,255,255,.16); text-align: center; font-weight: 800; }
+  body.touch #title .keys { display: none; }
+  @keyframes pulse { 0%,100% { opacity: .45 } 50% { opacity: 1 } }
+
+  /* ---------------- HUD */
+  #hud { position: fixed; inset: 0; pointer-events: none; z-index: 10; opacity: 0; transition: opacity .6s; text-shadow: 0 1px 8px rgba(10, 14, 50, .45); }
+  #hud.on { opacity: 1; }
+  #hud.hidden { opacity: 0 !important; }
+  #scorecard { position: absolute; left: max(18px, env(safe-area-inset-left)); top: max(16px, env(safe-area-inset-top)); }
+  #scorecard .row { display: flex; align-items: baseline; gap: 10px; }
+  #scorecard .lbl { font-size: 11px; letter-spacing: .25em; text-transform: uppercase; opacity: .75; font-weight: 800; width: 62px; }
+  #total { font-family: var(--display); font-weight: 800; font-size: 28px; font-variant-numeric: tabular-nums; }
+  #best { font-weight: 800; font-size: 15px; opacity: .85; font-variant-numeric: tabular-nums; }
+  #meter { position: absolute; right: max(18px, env(safe-area-inset-right)); top: max(16px, env(safe-area-inset-top)); text-align: right; }
+  #meter div { line-height: 1.1; }
+  #speed { font-family: var(--display); font-weight: 800; font-size: 30px; font-variant-numeric: tabular-nums; }
+  #alt { font-weight: 800; font-size: 15px; font-variant-numeric: tabular-nums; }
+  #meter small { margin-left: 6px; font-size: 11px; letter-spacing: .15em; opacity: .75; font-weight: 800; text-transform: uppercase; }
+  #tod { margin-top: 6px; font-size: 11px; letter-spacing: .3em; text-transform: uppercase; opacity: .7; font-weight: 800; }
+
+  #combo { position: absolute; left: 50%; bottom: max(26px, env(safe-area-inset-bottom)); transform: translate(-50%, 16px); display: flex; align-items: center; gap: 12px; opacity: 0; transition: opacity .25s, transform .25s; }
+  #combo.on { opacity: 1; transform: translate(-50%, 0); }
+  #combo svg { width: 46px; height: 46px; transform: rotate(-90deg); }
+  #combo circle { fill: none; stroke-width: 4; }
+  #combo .bg { stroke: rgba(255,255,255,.22); }
+  #comboRing { stroke: var(--accent); stroke-linecap: round; stroke-dasharray: 126; transition: stroke-dashoffset .1s linear; }
+  #comboPts { font-family: var(--display); font-weight: 800; font-size: 38px; font-variant-numeric: tabular-nums; }
+  #comboMult { --heat: 0; font-family: var(--display); font-weight: 800; font-size: 26px; color: color-mix(in srgb, var(--accent) calc((1 - var(--heat)) * 100%), var(--hot)); }
+
+  #feed { position: absolute; left: 50%; bottom: 96px; transform: translateX(-50%); display: flex; flex-direction: column; align-items: center; gap: 4px; width: 90vw; }
+  .feed-item { display: flex; gap: 10px; align-items: baseline; font-weight: 800; font-size: 19px; animation: pop .35s cubic-bezier(.2, 1.6, .4, 1); transition: opacity .5s, transform .5s; }
+  .feed-item .p { color: var(--accent); font-size: 15px; }
+  .feed-item.flow { font-size: 15px; opacity: .85; }
+  .feed-item.flow .p { color: #cfe6ff; }
+  .feed-item.gate .p { color: var(--accent2); }
+  .feed-item.lost { color: #ffb0a0; font-size: 15px; }
+  .feed-item.lost .p { color: #ff8a70; }
+  .feed-item.out { opacity: 0; transform: translateY(-14px); }
+  @keyframes pop { from { transform: scale(.4); opacity: 0 } to { transform: scale(1); opacity: 1 } }
+
+  #toast { position: absolute; left: 50%; top: 30%; transform: translate(-50%, -50%) scale(.8); text-align: center; opacity: 0; transition: opacity .25s, transform .3s cubic-bezier(.2, 1.4, .4, 1); }
+  #toast.show { opacity: 1; transform: translate(-50%, -50%) scale(1); }
+  #toast .big { font-family: var(--display); font-weight: 800; font-size: clamp(30px, 6vw, 56px); }
+  #toast .sub { font-weight: 800; letter-spacing: .25em; text-transform: uppercase; font-size: 12px; opacity: .8; margin-top: 4px; }
+  #toast.bank .big { color: var(--accent); }
+  #toast.record .big { color: var(--accent2); }
+  #toast.crash .big { color: #fff; }
+  #hint { position: absolute; left: 50%; top: max(70px, 12vh); transform: translateX(-50%); max-width: 90vw; text-align: center; font-weight: 700; font-size: 14px; padding: 8px 14px; border-radius: 12px; background: var(--shade); backdrop-filter: blur(6px); opacity: 0; transition: opacity .4s; }
+  #hint.show { opacity: 1; }
+  #banner { position: absolute; left: 50%; top: 18%; transform: translateX(-50%); font-family: var(--display); font-weight: 800; letter-spacing: .14em; text-transform: uppercase; font-size: 18px; opacity: 0; transition: opacity .4s; }
+  #banner.show { opacity: .95; }
+
+  /* ---------------- pause */
+  #pause { position: fixed; inset: 0; z-index: 25; display: grid; place-items: center; background: rgba(10, 13, 40, .55); backdrop-filter: blur(10px); opacity: 0; pointer-events: none; transition: opacity .25s; }
+  #pause.on { opacity: 1; pointer-events: auto; }
+  #pause .panel { width: min(440px, 92vw); max-height: 92vh; overflow: auto; }
+  #pause h2 { font-family: var(--display); font-weight: 800; letter-spacing: .12em; margin: 0 0 16px; font-size: 26px; text-align: center; }
+  #pause button { width: 100%; display: flex; justify-content: space-between; align-items: center; gap: 12px; margin: 6px 0; padding: 13px 16px; border-radius: 14px; border: 1px solid rgba(255,255,255,.14); background: rgba(255,255,255,.08); color: var(--ink); font: 700 15px var(--ui); cursor: pointer; }
+  #pause button:hover { background: rgba(255,255,255,.16); }
+  #pause button.primary { background: var(--ink); color: #1a2050; justify-content: center; }
+  #pause .v { opacity: .75; font-weight: 800; }
+  #pause .help { margin-top: 14px; font-size: 12.5px; line-height: 1.7; opacity: .8; display: grid; grid-template-columns: auto 1fr; gap: 0 12px; }
+  #pause .help b { font-weight: 800; }
+  body.touch #pause .help { display: none; }
+
+  /* ---------------- touch */
+  #touch { position: fixed; inset: 0; z-index: 12; display: none; pointer-events: none; }
+  body.touch #touch { display: block; }
+  #stickZone { position: absolute; left: 0; top: 18%; bottom: 0; width: 55%; pointer-events: auto; }
+  #stick { position: fixed; width: 120px; height: 120px; margin: -60px 0 0 -60px; border-radius: 50%; border: 2px solid rgba(255,255,255,.35); background: rgba(255,255,255,.06); opacity: 0; transition: opacity .2s; pointer-events: none; }
+  #stick.on { opacity: 1; }
+  #knob { position: absolute; left: 35px; top: 35px; width: 50px; height: 50px; border-radius: 50%; background: rgba(255,255,255,.55); }
+  .tbtn { position: absolute; pointer-events: auto; border-radius: 50%; border: 2px solid rgba(255,255,255,.4); background: rgba(20, 26, 70, .28); backdrop-filter: blur(4px); color: #fff; font: 800 12px var(--ui); letter-spacing: .08em; display: grid; place-items: center; text-transform: uppercase; }
+  .tbtn.down { background: rgba(255,255,255,.35); }
+  #bJump { right: max(22px, env(safe-area-inset-right)); bottom: max(34px, env(safe-area-inset-bottom)); width: 92px; height: 92px; font-size: 14px; }
+  #bGrab { right: 128px; bottom: 40px; width: 64px; height: 64px; }
+  #bBrake { right: 116px; bottom: 120px; width: 58px; height: 58px; }
+  #bGlide { right: 34px; bottom: 140px; width: 64px; height: 64px; }
+  .sbtn { position: absolute; top: max(14px, env(safe-area-inset-top)); pointer-events: auto; width: 40px; height: 40px; border-radius: 12px; border: 1px solid rgba(255,255,255,.3); background: rgba(20, 26, 70, .3); color: #fff; font: 800 16px var(--ui); display: grid; place-items: center; }
+  #pauseBtn { left: 50%; margin-left: -46px; }
+  #camBtn { left: 50%; margin-left: 6px; }
+  body.touch #scorecard #total { font-size: 22px; }
+  body.touch #speed { font-size: 22px; }
+  @media (max-width: 600px) { #comboPts { font-size: 28px; } #feed { bottom: 84px; } .feed-item { font-size: 16px; } }
+</style>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="loading"><div class="box">
+  <div class="logo">ПОРОША</div>
+  <div class="track"><div id="loadbar"></div></div>
+  <div id="loadmsg">Насыпаем снег…</div>
+</div></div>
+
+<div id="title" class="gone">
+  <div style="text-align:center">
+    <h1>ПОРОША</h1>
+    <div class="tag">фрирайд · открытый склон без конца</div>
+  </div>
+  <div>
+    <div class="press">Нажми любую клавишу или коснись экрана</div>
+    <div class="keys">
+      <span><b>A</b><b>D</b>повороты</span>
+      <span><b>Пробел</b>держать и отпустить — прыжок</span>
+      <span><b>S</b>тормоз</span><span><b>W</b>стойка «яйцо»</span>
+      <span><b>Shift</b>грэб</span><span><b>G</b>параплан</span>
+      <span><b>C</b>камера</span><span><b>T</b>время суток</span><span><b>Esc</b>меню</span>
+    </div>
+  </div>
+</div>
+
+<div id="hud">
+  <div id="scorecard">
+    <div class="row"><span class="lbl">очки</span><span id="total">0</span></div>
+    <div class="row"><span class="lbl">рекорд</span><span id="best">0</span></div>
+  </div>
+  <div id="meter">
+    <div><span id="speed">0</span><small>км/ч</small></div>
+    <div><span id="alt">0</span><small>м вниз</small></div>
+    <div id="tod"></div>
+  </div>
+  <div id="feed"></div>
+  <div id="combo">
+    <svg viewBox="0 0 46 46"><circle class="bg" cx="23" cy="23" r="20"/><circle id="comboRing" cx="23" cy="23" r="20"/></svg>
+    <div id="comboPts">0</div>
+    <div id="comboMult">×1</div>
+  </div>
+  <div id="toast"></div>
+  <div id="hint"></div>
+  <div id="banner"></div>
+</div>
+
+<div id="touch">
+  <div id="stickZone"></div>
+  <div id="stick"><div id="knob"></div></div>
+  <div class="tbtn" id="bJump">Прыжок</div>
+  <div class="tbtn" id="bGrab">Грэб</div>
+  <div class="tbtn" id="bBrake">Тормоз</div>
+  <div class="tbtn" id="bGlide">Крыло</div>
+  <div class="sbtn" id="pauseBtn">❚❚</div>
+  <div class="sbtn" id="camBtn">◉</div>
+</div>
+
+<div id="pause"><div class="panel">
+  <h2>ПАУЗА</h2>
+  <button class="primary" data-a="resume">Продолжить</button>
+  <button data-a="cam">Камера <span class="v"></span></button>
+  <button data-a="tod">Время суток <span class="v"></span></button>
+  <button data-a="outfit">Костюм <span class="v"></span></button>
+  <button data-a="quality">Графика <span class="v"></span></button>
+  <button data-a="sound">Звук <span class="v"></span></button>
+  <button data-a="music">Музыка <span class="v"></span></button>
+  <button data-a="respawn">Встать на лыжи</button>
+  <button data-a="new">Новая гора</button>
+  <div class="help">
+    <b>A / D</b><span>повороты; в воздухе — вращения</span>
+    <b>W / S</b><span>разгон и тормоз; в воздухе — фронт- и бэкфлип</span>
+    <b>Пробел</b><span>присесть и прыгнуть (дольше держишь — выше)</span>
+    <b>Shift</b><span>грэб (с W/S/A/D — разные)</span>
+    <b>G</b><span>раскрыть/сложить параплан (в воздухе)</span>
+    <b>C · T · O</b><span>камера · время суток · костюм</span>
+    <b>R · H · M</b><span>встать · скрыть интерфейс · звук</span>
+  </div>
+</div></div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
