@@ -180,6 +180,7 @@ async function boot() {
     $('title').classList.add('gone');
     hud.show(true);
     input.clearEvents();
+    input.jumpLock = true;
     const v = player.vel;
     if (v.length() < 2) { v.set(Math.sin(player.yaw) * 3, 0, Math.cos(player.yaw) * 3); }
     hud.hint(input.isTouch ? 'Стик — поворот. Прыжок: удержи и отпусти. В воздухе стик крутит трюки.' : 'Держи пробел и отпусти — прыжок. В воздухе A/D — винт, W/S — сальто, Shift — граб.', 6);

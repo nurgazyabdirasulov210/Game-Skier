@@ -104,6 +104,8 @@ export class Input {
       const edge = (i, ev) => { const v = b(i); if (v && !this.lastPad[i]) this.events.add(ev); this.lastPad[i] = v; };
       edge(1, 'glide'); edge(3, 'camera'); edge(9, 'pause'); edge(8, 'time'); edge(0, 'start');
     }
+    // кнопка, которой начали игру, не должна сразу стать прыжком
+    if (this.jumpLock) { if (!jump) this.jumpLock = false; jump = false; }
     steer = Math.max(-1, Math.min(1, steer));
     this.steer = steer; this.up = up; this.down = down;
     this.jump = jump; this.grab = grab;
