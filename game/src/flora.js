@@ -308,8 +308,9 @@ export class Flora {
         const rk = rockiness(x, z);
         const roll = rng();
         normalAt(x, z, nrm);
-        const steep = nrm.y < 0.8;
         const y = height(x, z);
+        // keep cliff lips and their landings open
+        const steep = nrm.y < 0.8 || y - height(x, z + 9) > 6 || height(x, z - 9) - y > 7;
         const spruceP = kind > 0.08 ? 1 : kind > -0.12 ? 0.35 : 0;
         if (!steep && roll < d * 0.55 + 0.004) {
           if (rng() < spruceP) {

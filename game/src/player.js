@@ -224,7 +224,7 @@ export class Player {
     } else a.grab = Math.max(0, a.grab - dt * 5);
 
     // paraglider
-    if (input.gliderPressed && a.t > 0.25 && hAbove > 2.5) {
+    if (input.gliderPressed && a.t > 0.15 && hAbove > 2.0) {
       this._startGlide();
       return;
     }
