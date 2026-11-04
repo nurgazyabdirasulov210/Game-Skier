@@ -1,0 +1,165 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>ПУХ — фрирайд по целине</title>
+<style>
+  :root { --fg: #ffffff; --panel: rgba(14, 22, 70, 0.55); --accent: #ffb04a; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0d1a5c; color: var(--fg);
+    font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  #hud-tl, #combo, .pop, #banner, #hud-tr { text-shadow: 0 1px 6px rgba(10, 18, 70, .45); }
+
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: linear-gradient(#1546d0, #a9c6ff); transition: opacity .8s; z-index: 30; }
+  #loading.done { opacity: 0; pointer-events: none; }
+  #loading h1 { margin: 0; font-size: 64px; font-weight: 900; font-style: italic; letter-spacing: .06em; text-align: center; }
+  #loading p { text-align: center; opacity: .8; margin: 4px 0 0; }
+
+  #hud-tl { position: fixed; left: 18px; top: 14px; z-index: 5; font-weight: 600; font-size: 15px; }
+  #hud-tl div { display: flex; gap: 10px; align-items: center; line-height: 1.55; }
+  #hud-tl svg { width: 14px; height: 14px; opacity: .9; }
+  #hud-tr { position: fixed; right: 18px; top: 12px; z-index: 5; text-align: right; opacity: .85; font-weight: 600; }
+  #speed { font-size: 22px; font-style: italic; }
+  #hud-tr small { opacity: .7; margin-left: 3px; }
+
+  #combo { position: fixed; left: 50%; bottom: 34px; transform: translateX(-50%); display: flex; align-items: center; gap: 12px;
+    z-index: 5; opacity: 0; transition: opacity .3s; pointer-events: none; }
+  #combo.on { opacity: 1; }
+  #combo.bump #combo-num { animation: bump .28s ease-out; }
+  @keyframes bump { 0% { transform: scale(1.22); } 100% { transform: scale(1); } }
+  #combo .star { position: relative; width: 60px; height: 60px; }
+  #combo .star svg { position: absolute; inset: 0; width: 60px; height: 60px; }
+  #combo-num { display: inline-block; font-size: 50px; font-weight: 800; font-style: italic; transform-origin: left center; }
+  #combo-mult { position: absolute; left: -28px; top: -34px; font-size: 34px; font-weight: 800; font-style: italic; }
+  #ring { transition: stroke-dashoffset .1s linear; }
+
+  #pops { position: fixed; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+  .pop { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 16px; font-weight: 700; font-style: italic; will-change: transform, opacity; }
+  .pop i { font-style: normal; margin-right: 3px; opacity: .9; }
+  .pop small { margin-left: 6px; font-size: 12px; font-weight: 600; opacity: .85; letter-spacing: .03em; }
+
+  #banner { position: fixed; left: 50%; top: 24%; transform: translate(-50%, 0); font-size: 34px; font-weight: 800; font-style: italic;
+    opacity: 0; z-index: 6; pointer-events: none; white-space: nowrap; }
+  #banner.show { animation: banner 1.9s ease-out forwards; }
+  #banner.bad { color: #ffd0d0; font-size: 24px; }
+  @keyframes banner { 0% { opacity: 0; transform: translate(-50%, 12px) scale(.9); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -16px); } }
+  #cam-name { position: fixed; left: 50%; top: 14px; transform: translateX(-50%); opacity: 0; z-index: 6; font-weight: 600; pointer-events: none; }
+  #cam-name.show { animation: banner 1.6s ease-out forwards; }
+
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; z-index: 10; background: rgba(8, 14, 50, .25); }
+  .overlay.show { display: grid; }
+  .card { background: var(--panel); backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px); border-radius: 22px; padding: 24px 26px;
+    width: min(540px, calc(100vw - 32px)); max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; }
+  .card h1 { margin: 0; font-size: 56px; font-weight: 900; font-style: italic; letter-spacing: .05em; line-height: 1; }
+  .card p.sub { margin: 6px 0 12px; opacity: .8; }
+  .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .14em; opacity: .7; margin: 16px 0 7px; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 7px; }
+  button { font: inherit; color: var(--fg); background: rgba(255,255,255,.12); border: 1px solid rgba(255,255,255,.22);
+    padding: 8px 14px; border-radius: 999px; cursor: pointer; display: inline-flex; align-items: center; gap: 7px; }
+  button:hover { background: rgba(255,255,255,.2); }
+  button.on { background: #fff; color: #18205a; border-color: #fff; }
+  button.primary { background: var(--accent); color: #2a1300; border-color: transparent; font-weight: 800; font-size: 18px; padding: 11px 26px; font-style: italic; }
+  .sw { width: 14px; height: 14px; border-radius: 50%; display: inline-block; border: 1px solid rgba(255,255,255,.6); }
+  .keys { display: grid; grid-template-columns: auto 1fr; gap: 5px 14px; font-size: 13px; opacity: .92; }
+  kbd { font: 600 11px/1 system-ui, sans-serif; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.25); border-bottom-width: 2px;
+    padding: 3px 6px; border-radius: 5px; margin-right: 2px; white-space: nowrap; }
+  .actions { display: flex; gap: 10px; margin-top: 20px; flex-wrap: wrap; }
+  #help { position: fixed; right: 18px; bottom: 18px; z-index: 6; display: none; }
+  #help.show { display: block; }
+  #help .card { width: 300px; padding: 16px 18px; }
+
+  /* touch */
+  body:not(.touch) .tc { display: none !important; }
+  #t-steer { position: fixed; left: 0; bottom: 0; width: 50vw; height: 60vh; z-index: 3; }
+  .tbtn { position: fixed; z-index: 4; width: 64px; height: 64px; border-radius: 50%; background: rgba(255,255,255,.16); border: 1px solid rgba(255,255,255,.35);
+    display: grid; place-items: center; font-weight: 700; font-size: 12px; text-align: center; }
+  #t-jump { right: 20px; bottom: 26px; width: 84px; height: 84px; }
+  #t-grab { right: 114px; bottom: 30px; }
+  #t-glider { right: 30px; bottom: 124px; }
+  #t-tuck { right: 114px; bottom: 112px; width: 52px; height: 52px; }
+  #t-back { right: 186px; bottom: 40px; width: 52px; height: 52px; }
+  #t-pause { right: 16px; top: 54px; width: 42px; height: 42px; }
+  body.touch #hint { display: none; }
+  #hint { position: fixed; left: 50%; bottom: 8px; transform: translateX(-50%); opacity: .55; font-size: 12px; z-index: 5; pointer-events: none; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js", "three/addons/": "./vendor/three/addons/" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+
+<div id="loading"><div><h1>ПУХ</h1><p>Насыпаем снег…</p></div></div>
+
+<div id="hud-tl">
+  <div title="Рекорд"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 18h18l-2-11-5 5-2-7-2 7-5-5z"/></svg><span id="best">0</span></div>
+  <div title="Очки за спуск"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 2l2.9 6.6 7.1.6-5.4 4.7 1.6 7L12 17.3 5.8 21l1.6-7L2 9.2l7.1-.6z"/></svg><span id="total">0</span></div>
+</div>
+<div id="hud-tr"><span id="speed">0</span><small>км/ч</small></div>
+
+<div id="combo">
+  <div class="star">
+    <span id="combo-mult"></span>
+    <svg viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="3"/>
+      <circle id="ring" cx="32" cy="32" r="28" fill="none" stroke="#fff" stroke-width="3.5" stroke-linecap="round"
+        stroke-dasharray="176" stroke-dashoffset="0" transform="rotate(-90 32 32)"/>
+      <path d="M32 17l4.3 9.6 10.4.9-7.9 6.9 2.4 10.2L32 39.2l-9.2 5.4 2.4-10.2-7.9-6.9 10.4-.9z" fill="none" stroke="#fff" stroke-width="2.4" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <span id="combo-num">0</span>
+</div>
+<div id="pops"></div>
+<div id="banner"></div>
+<div id="cam-name"></div>
+<div id="hint"><kbd>H</kbd> управление · <kbd>Esc</kbd> меню</div>
+
+<div id="menu" class="overlay">
+  <div class="card">
+    <h1>ПУХ</h1>
+    <p class="sub">Открытый склон, глубокая целина, пушистый лес. Катайся куда хочешь, собирай трюки в комбо.</p>
+    <h2>Погода</h2>
+    <div class="row" id="moods"></div>
+    <h2>Райдер</h2>
+    <div class="row" id="outfits"></div>
+    <h2>Управление</h2>
+    <div class="keys">
+      <span><kbd>A</kbd><kbd>D</kbd></span><span>повороты / вращение в воздухе</span>
+      <span><kbd>W</kbd> <kbd>S</kbd></span><span>разгон и торможение / сальто вперёд и назад</span>
+      <span><kbd>Пробел</kbd></span><span>зажми и отпусти — прыжок</span>
+      <span><kbd>Shift</kbd> <kbd>J</kbd><kbd>K</kbd><kbd>L</kbd></span><span>захваты лыж в воздухе</span>
+      <span><kbd>F</kbd></span><span>параплан в полёте (ещё раз — отпустить)</span>
+      <span><kbd>C</kbd></span><span>камера: сзади / издалека / от первого лица</span>
+      <span><kbd>R</kbd> <kbd>M</kbd></span><span>вернуться на трассу / звук</span>
+    </div>
+    <div class="actions">
+      <button class="primary" id="go">Поехали</button>
+      <button id="restart">Новый спуск</button>
+    </div>
+  </div>
+</div>
+
+<div id="help"><div class="card">
+  <div class="keys">
+    <span><kbd>A</kbd><kbd>D</kbd></span><span>повороты, вращение</span>
+    <span><kbd>W</kbd><kbd>S</kbd></span><span>разгон, тормоз, сальто</span>
+    <span><kbd>Пробел</kbd></span><span>прыжок</span>
+    <span><kbd>Shift</kbd></span><span>захват</span>
+    <span><kbd>F</kbd></span><span>параплан</span>
+    <span><kbd>C</kbd></span><span>камера</span>
+  </div>
+</div></div>
+
+<div class="tc" id="t-steer"></div>
+<div class="tc tbtn" id="t-jump">ПРЫЖОК</div>
+<div class="tc tbtn" id="t-grab">ЗАХВАТ</div>
+<div class="tc tbtn" id="t-glider">ПАРА-<br>ПЛАН</div>
+<div class="tc tbtn" id="t-tuck">▲</div>
+<div class="tc tbtn" id="t-back">▼</div>
+<div class="tc tbtn" id="t-pause">II</div>
+
+<script type="module" src="./src/main.js"></script>
+</body>
+</html>
