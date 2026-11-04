@@ -1,0 +1,161 @@
+<!doctype html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no">
+<title>Долина — спуск</title>
+<style>
+  :root { --fg: #ffffff; --panel: rgba(12, 18, 58, 0.5); --accent: #ff8a3d; }
+  html, body { margin: 0; height: 100%; overflow: hidden; background: #0b1440; color: var(--fg);
+    font: 14px/1.3 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; touch-action: none; user-select: none; -webkit-user-select: none; }
+  canvas { display: block; width: 100vw; height: 100vh; }
+  .shadow { text-shadow: 0 2px 6px rgba(10, 16, 60, .45); }
+
+  #loading { position: fixed; inset: 0; display: grid; place-items: center; background: linear-gradient(#1f55d8, #c9dcff); transition: opacity .8s; z-index: 20; }
+  #loading.done { opacity: 0; pointer-events: none; }
+  #loading h1 { margin: 0 0 8px; font-size: 44px; font-weight: 800; letter-spacing: .04em; }
+
+  /* HUD */
+  #hud-tl { position: fixed; left: 16px; top: 12px; z-index: 5; font-weight: 600; }
+  #hud-tl div { display: flex; gap: 10px; align-items: center; font-size: 18px; line-height: 1.5; }
+  #hud-tl i { font-style: normal; opacity: .85; width: 18px; text-align: center; }
+  #hud-tr { position: fixed; right: 16px; top: 10px; z-index: 5; text-align: right; }
+  #speed { font-size: 34px; font-weight: 800; font-style: italic; }
+  #hud-tr small { display: block; opacity: .75; margin-top: -4px; }
+  #time { opacity: .8; font-weight: 600; }
+  #menu-btn { position: fixed; right: 16px; bottom: 16px; z-index: 6; }
+
+  #combo { position: fixed; left: 50%; bottom: 26px; transform: translateX(-50%); display: flex; align-items: center; gap: 10px;
+    z-index: 5; opacity: 0; transition: opacity .25s; pointer-events: none; }
+  #combo.on { opacity: 1; }
+  #combo.bump #combo-num { animation: bump .25s ease-out; }
+  @keyframes bump { 0% { transform: scale(1.25); } 100% { transform: scale(1); } }
+  #combo svg { width: 64px; height: 64px; }
+  #combo-num { display: inline-block; font-size: 48px; font-weight: 800; font-style: italic; letter-spacing: .01em; }
+  #combo-mult { position: absolute; left: -10px; top: -30px; font-size: 30px; font-weight: 800; font-style: italic; }
+
+  #pops { position: fixed; inset: 0; pointer-events: none; z-index: 4; overflow: hidden; }
+  .pop { position: absolute; left: 0; top: 0; white-space: nowrap; font-size: 17px; font-weight: 700; font-style: italic;
+    text-shadow: 0 1px 4px rgba(10, 16, 60, .55); }
+
+  #banner { position: fixed; left: 50%; top: 22%; transform: translate(-50%, 0); font-size: 30px; font-weight: 800; font-style: italic;
+    opacity: 0; z-index: 6; pointer-events: none; white-space: nowrap; }
+  #banner.show { animation: banner 1.8s ease-out forwards; }
+  #banner.bad { color: #ffd2d2; }
+  @keyframes banner { 0% { opacity: 0; transform: translate(-50%, 10px) scale(.9); } 12% { opacity: 1; transform: translate(-50%, 0) scale(1); }
+    75% { opacity: 1; } 100% { opacity: 0; transform: translate(-50%, -14px); } }
+  #cam-name { position: fixed; left: 50%; top: 12px; transform: translateX(-50%); opacity: 0; z-index: 6; font-weight: 600; }
+  #cam-name.show { animation: banner 1.6s ease-out forwards; }
+
+  /* menu */
+  .overlay { position: fixed; inset: 0; display: none; place-items: center; z-index: 10; background: rgba(8, 12, 40, .35); backdrop-filter: blur(3px); }
+  .overlay.show { display: grid; }
+  .card { background: var(--panel); backdrop-filter: blur(12px); border-radius: 20px; padding: 22px 24px; width: min(560px, calc(100vw - 32px));
+    max-height: calc(100vh - 32px); overflow: auto; box-sizing: border-box; }
+  .card h1 { margin: 0 0 2px; font-size: 38px; font-weight: 800; font-style: italic; letter-spacing: .02em; }
+  .card p.sub { margin: 0 0 14px; opacity: .8; }
+  .card h2 { font-size: 11px; text-transform: uppercase; letter-spacing: .12em; opacity: .7; margin: 14px 0 6px; font-weight: 600; }
+  .row { display: flex; flex-wrap: wrap; gap: 6px; }
+  button { font: inherit; color: var(--fg); background: rgba(255,255,255,.13); border: 1px solid rgba(255,255,255,.2);
+    padding: 7px 12px; border-radius: 999px; cursor: pointer; }
+  button:hover { background: rgba(255,255,255,.24); }
+  button.on { background: var(--accent); border-color: var(--accent); color: #1b0f05; font-weight: 600; }
+  button.big { font-size: 18px; font-weight: 800; padding: 10px 26px; background: var(--accent); border-color: var(--accent); color: #1b0f05; margin-top: 16px; }
+  table.keys { width: 100%; border-collapse: collapse; font-size: 13px; margin-top: 4px; }
+  table.keys td { padding: 3px 0; vertical-align: top; }
+  table.keys td:first-child { opacity: .75; width: 46%; padding-right: 10px; }
+  .fin-stats { display: grid; grid-template-columns: auto auto; gap: 4px 18px; font-size: 18px; margin-top: 8px; }
+  .fin-stats b { font-style: italic; }
+
+  /* touch */
+  #touch { display: none; }
+  @media (pointer: coarse) {
+    #touch { display: block; }
+    .desk { display: none; }
+    #menu-btn { top: 64px; bottom: auto; }
+  }
+  .tpad { position: fixed; bottom: 18px; z-index: 6; display: grid; gap: 10px; }
+  .tpad button { width: 64px; height: 64px; border-radius: 50%; font-size: 22px; padding: 0; background: rgba(255,255,255,.16); }
+  .tpad button.down { background: rgba(255,255,255,.4); }
+  #tleft { left: 14px; grid-template-columns: 64px 64px; }
+  #tright { right: 14px; grid-template-columns: 64px 64px 64px; }
+  body.clean #hud-tl, body.clean #hud-tr, body.clean #menu-btn, body.clean #touch { display: none; }
+</style>
+<script type="importmap">
+{ "imports": { "three": "./vendor/three/three.module.min.js" } }
+</script>
+</head>
+<body>
+<canvas id="c"></canvas>
+<div id="loading"><div><h1>ДОЛИНА</h1><p id="loading-status">Загрузка…</p></div></div>
+
+<div id="hud-tl" class="shadow">
+  <div title="Рекорд"><i>♛</i><span id="best">0</span></div>
+  <div title="Очки за спуск"><i>★</i><span id="total">0</span></div>
+</div>
+<div id="hud-tr" class="shadow"><div id="speed">0</div><small>км/ч</small><div id="time">0:00</div></div>
+<div id="combo" class="shadow">
+  <div style="position:relative">
+    <span id="combo-mult"></span>
+    <svg viewBox="0 0 64 64">
+      <circle cx="32" cy="32" r="28" fill="none" stroke="rgba(255,255,255,.25)" stroke-width="4"/>
+      <circle id="combo-ring" cx="32" cy="32" r="28" fill="none" stroke="#fff" stroke-width="4" stroke-linecap="round"
+        stroke-dasharray="176" stroke-dashoffset="0" transform="rotate(-90 32 32)"/>
+      <path d="M32 17l4.4 9 9.9 1.4-7.2 7 1.7 9.8L32 39.6l-8.8 4.6 1.7-9.8-7.2-7 9.9-1.4z" fill="none" stroke="#fff" stroke-width="2.6" stroke-linejoin="round"/>
+    </svg>
+  </div>
+  <span id="combo-num">0</span>
+</div>
+<div id="pops"></div>
+<div id="banner" class="shadow"></div>
+<div id="cam-name" class="shadow"></div>
+<button id="menu-btn">☰</button>
+
+<div id="menu" class="overlay">
+  <div class="card shadow">
+    <h1>СПУСК</h1>
+    <p class="sub">Фрирайд по долине: прыжки, вращения, сальто, брёвна и параплан.</p>
+    <h2>Старт</h2><div class="row" id="starts"></div>
+    <h2>Настроение</h2><div class="row" id="moods"></div>
+    <h2>Куртка</h2><div class="row" id="outfits"></div>
+    <h2>Камера</h2><div class="row" id="cams"></div>
+    <h2 class="desk">Управление</h2>
+    <table class="keys desk">
+      <tr><td>A / D, ← / →</td><td>поворот; в воздухе вращение</td></tr>
+      <tr><td>W / ↑</td><td>группировка (быстрее); в воздухе сальто вперёд</td></tr>
+      <tr><td>S / ↓</td><td>торможение; в воздухе сальто назад</td></tr>
+      <tr><td>Пробел</td><td>держать и отпустить: прыжок, соскок с бревна</td></tr>
+      <tr><td>Shift / F</td><td>захват лыж в воздухе</td></tr>
+      <tr><td>G / E</td><td>параплан (в воздухе выше 3 м)</td></tr>
+      <tr><td>Мышь (тянуть), колесо</td><td>осмотреться, приблизить</td></tr>
+      <tr><td>C / V</td><td>камера / вид от первого лица</td></tr>
+      <tr><td>1–5, O, M, H</td><td>настроение, куртка, звук, скрыть интерфейс</td></tr>
+      <tr><td>T / R / Esc</td><td>к последней точке / заново / меню</td></tr>
+    </table>
+    <button class="big" id="go">Поехали</button>
+  </div>
+</div>
+
+<div id="finish" class="overlay">
+  <div class="card shadow">
+    <h1>ФИНИШ</h1>
+    <div class="fin-stats">
+      <span>Очки</span><b id="fin-score">0</b>
+      <span>Рекорд</span><b id="fin-best">0</b>
+      <span>Время</span><b id="fin-time">0:00</b>
+    </div>
+    <div class="row"><button class="big" id="again">Ещё раз</button><button class="big" id="free" style="background:rgba(255,255,255,.15);border-color:rgba(255,255,255,.3);color:#fff">Кататься дальше</button></div>
+  </div>
+</div>
+
+<div id="touch">
+  <div class="tpad" id="tleft"><button data-t="steer:-1">◀</button><button data-t="steer:1">▶</button></div>
+  <div class="tpad" id="tright">
+    <button data-t="lean:1">▲</button><button data-t="grab">✋</button><button data-t="wing">◠</button>
+    <button data-t="lean:-1">▼</button><button data-t="jump" style="background:rgba(255,138,61,.55)">⤒</button><button data-t="cam">◎</button>
+  </div>
+</div>
+
+<script type="module" src="./src/ride/main.js"></script>
+</body>
+</html>

@@ -196,6 +196,7 @@ export function buildVegetation(quality, scene, exclusions) {
   const spruceNeedles = new InstancedField('spruce', spruceV.map((v) => ({ hi: v.hi.needles, lo: v.lo.needles })), needleMat, { loDist: 330 });
 
   const birchCrownItems = [], tuftItems = [];
+  const colliders = []; // tree trunks: { x, z, r, kind }
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), sc = new THREE.Vector3(), tp = new THREE.Vector3();
   const td = quality.treeDensity;
 
@@ -230,6 +231,7 @@ export function buildVegetation(quality, scene, exclusions) {
     const scale = (0.8 + rnd() * 0.45) * (1 - summit * 0.25);
     const mm = place(x, z, 0.12 + summit * 0.2, scale);
     birches.add(v, mm);
+    colliders.push({ x, z, r: 0.32 * scale, kind: 'tree' });
     const tint = rnd();
     for (const c of birchV[v].crowns) {
       const wp = c.p.clone().applyMatrix4(mm);
@@ -246,8 +248,10 @@ export function buildVegetation(quality, scene, exclusions) {
   }, (x, z) => {
     if (blocked(x, z, 4)) return;
     const v = Math.floor(rnd() * spruceV.length);
-    const mm = place(x, z, 0.06, 0.7 + rnd() * 0.6);
+    const sc2 = 0.7 + rnd() * 0.6;
+    const mm = place(x, z, 0.06, sc2);
     spruceTrunks.add(v, mm);
+    colliders.push({ x, z, r: 0.4 * sc2 + 0.05, kind: 'tree' });
     spruceNeedles.add(v, mm);
   });
 
@@ -262,6 +266,7 @@ export function buildVegetation(quality, scene, exclusions) {
     const scale = 0.85 + rnd() * 0.35;
     const mm = place(x, z, 0.16, scale);
     pines.add(v, mm);
+    colliders.push({ x, z, r: 0.3 * scale, kind: 'tree' });
     const tint = rnd();
     for (const c of pineV[v].crowns) {
       const wp = c.p.clone().applyMatrix4(mm);
@@ -277,6 +282,7 @@ export function buildVegetation(quality, scene, exclusions) {
   const fields = [birches, pines, spruceTrunks, spruceNeedles];
   return {
     group,
+    colliders,
     birchCrowns,
     tuftCrowns,
     needleMat,

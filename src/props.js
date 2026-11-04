@@ -74,6 +74,8 @@ export function buildProps(quality, scene, landmarks) {
 
   const m = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
   const clearOf = (x, z, r) => landmarks.exclusions().every((ex) => (x - ex.x) ** 2 + (z - ex.z) ** 2 > (ex.r + r) ** 2);
+  const colliders = []; // { x, z, r, top, kind }
+  const logList = []; // { a: Vector3, b: Vector3, r } axis end points and radius
   const addRock = (x, z, size, wedge, sink = 0.35) => {
     const v = wedge ? 4 + Math.floor(rnd() * 4) : Math.floor(rnd() * 4);
     const n = normalAt(x, z);
@@ -83,6 +85,10 @@ export function buildProps(quality, scene, landmarks) {
     q.setFromEuler(e);
     s.set(size * (0.8 + rnd() * 0.4), size * (0.7 + rnd() * 0.5), size * (0.8 + rnd() * 0.4));
     rocks.add(v, m.compose(p.set(x, y, z), q, s));
+    const top = y + s.y * (wedge ? 1.5 : 0.85);
+    if (top - heightAt(x, z) > 0.5) {
+      colliders.push({ x, z, r: Math.max(s.x, s.z) * (wedge ? 0.75 : 1.05), top, kind: 'rock' });
+    }
   };
 
   // scattered rocks by zone
@@ -113,7 +119,7 @@ export function buildProps(quality, scene, landmarks) {
   for (let i = 0; i < 4; i++) {
     const r = mulberry32(SEED + 1500 + i);
     const len = 7 + r() * 8, rad = 0.45 + r() * 0.4;
-    logV.push({ hi: logGeometry(r, len, rad, false), lo: logGeometry(r, len, rad, true), len });
+    logV.push({ hi: logGeometry(r, len, rad, false), lo: logGeometry(r, len, rad, true), len, rad });
   }
   for (let i = 0; i < 3; i++) {
     const r = mulberry32(SEED + 1550 + i);
@@ -140,11 +146,19 @@ export function buildProps(quality, scene, landmarks) {
       q.setFromEuler(e);
       const y = (ha + hb) / 2 + 0.1;
       logs.add(v, m.compose(p.set(x, y, z), q, s.setScalar(1)));
+      const axis = new THREE.Vector3(1, 0, 0).applyQuaternion(q);
+      logList.push({
+        a: new THREE.Vector3(x, y, z).addScaledVector(axis, -half),
+        b: new THREE.Vector3(x, y, z).addScaledVector(axis, half),
+        r: logV[v].rad,
+      });
     } else {
       const v = Math.floor(rnd() * stumpV.length);
       e.set((rnd() - 0.5) * 0.25, rnd() * 6.28, (rnd() - 0.5) * 0.25);
       q.setFromEuler(e);
-      stumps.add(v, m.compose(p.set(x, heightAt(x, z) - 0.3, z), q, s.setScalar(0.9 + rnd() * 0.5)));
+      const k = 0.9 + rnd() * 0.5;
+      stumps.add(v, m.compose(p.set(x, heightAt(x, z) - 0.3, z), q, s.setScalar(k)));
+      colliders.push({ x, z, r: 0.3 * k, top: heightAt(x, z) + 1.2 * k, kind: 'stump' });
     }
   }
 
@@ -160,6 +174,9 @@ export function buildProps(quality, scene, landmarks) {
       mesh.rotation.set(0.05 * side, 0.12 * side, side * 0.42);
       mesh.castShadow = mesh.receiveShadow = true;
       group.add(mesh);
+      for (let k = 0; k < 3; k++) {
+        colliders.push({ x: x + side * (7.2 - k * 1.2), z: z + side * 0.6, r: 1.6, top: h + 3 + k * 4, kind: 'rock' });
+      }
     }
     // a capstone wedged between the tops
     const cap = new THREE.Mesh(rockGeometry(r, { detail: 0, sx: 2.6, sy: 1.4, sz: 1.6, jag: 0.2 }), rockMat);
@@ -183,6 +200,7 @@ export function buildProps(quality, scene, landmarks) {
     for (const side of [-1, 1]) {
       const px = x + side * (span / 2 - 3);
       const base = heightAt(px, z);
+      colliders.push({ x: px, z, r: 3.2, top: base + pierH + 1, kind: 'rock' });
       for (let k = 0; k < 4; k++) {
         const rk = new THREE.Mesh(rockGeometry(r, { detail: 1, sx: 3.2 - k * 0.4, sy: 2.4, sz: 3.0 - k * 0.3, jag: 0.25 }), rockMat);
         rk.position.set(px + (r() - 0.5) * 1.2, base + 1 + k * 2.1, z + (r() - 0.5) * 1.2);
@@ -203,6 +221,14 @@ export function buildProps(quality, scene, landmarks) {
     trunk.rotation.set(0, 0.08, Math.atan2(yr - yl, span));
     trunk.castShadow = trunk.receiveShadow = true;
     group.add(trunk);
+    {
+      const axis = new THREE.Vector3(1, 0, 0).applyEuler(trunk.rotation);
+      logList.push({
+        a: trunk.position.clone().addScaledVector(axis, -len / 2),
+        b: trunk.position.clone().addScaledVector(axis, len / 2),
+        r: 1.35,
+      });
+    }
     // broken crown end: a few snapped branches
     for (let i = 0; i < 4; i++) {
       const a = V(x - len / 2 + 6 + i * 2.5, (yl + yr) / 2 + 0.6, z + (r() - 0.5));
@@ -223,6 +249,7 @@ export function buildProps(quality, scene, landmarks) {
     tooth.rotation.set(0.12, 0.7, -0.18);
     tooth.castShadow = tooth.receiveShadow = true;
     group.add(tooth);
+    colliders.push({ x, z, r: 4.5, top: h + 22, kind: 'rock' });
     for (let i = 0; i < 10; i++) {
       const a = r() * Math.PI * 2, d = 7 + r() * 16;
       addRock(x + Math.cos(a) * d, z + Math.sin(a) * d, 1.2 + r() * 3.5, r() < 0.4);
@@ -238,7 +265,7 @@ export function buildProps(quality, scene, landmarks) {
   scene.add(group);
   const fields = [rocks, logs, stumps];
   return {
-    group, rockMat, barkMat, ice,
+    group, rockMat, barkMat, ice, colliders, logs: logList,
     counts: { rocks: rocks.items.length, logs: logs.items.length, stumps: stumps.items.length },
     update(camPos) { for (const f of fields) f.update(camPos); },
   };

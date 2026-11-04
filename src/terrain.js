@@ -207,6 +207,21 @@ export function buildTerrain(quality) {
   }
   geo.computeVertexNormals();
   geo.computeBoundingSphere();
+  const heights = new Float32Array(pos.count);
+  for (let i = 0; i < pos.count; i++) heights[i] = pos.getY(i);
+  const cellX = (MAP.halfX * 2) / rx, cellZ = (MAP.halfZ * 2) / rz;
+  /** Height of the rendered (triangulated) surface, matches the mesh exactly. */
+  const surfaceAt = (x, z) => {
+    const fx = clamp((x + MAP.halfX) / cellX, 0, rx - 1e-4);
+    const fz = clamp((z + MAP.halfZ) / cellZ, 0, rz - 1e-4);
+    const ix = Math.floor(fx), iz = Math.floor(fz);
+    const u = fx - ix, v = fz - iz;
+    const W = rx + 1;
+    const ha = heights[ix + W * iz], hb = heights[ix + W * (iz + 1)];
+    const hc = heights[ix + 1 + W * (iz + 1)], hd = heights[ix + 1 + W * iz];
+    if (u + v <= 1) return ha + (hd - ha) * u + (hb - ha) * v;
+    return hc + (hb - hc) * (1 - u) + (hd - hc) * (1 - v);
+  };
 
   const snowMat = stylize(new THREE.MeshLambertMaterial({ color: 0xffffff }), { rim: 0.35, sparkle: true });
   const mesh = new THREE.Mesh(geo, snowMat);
@@ -228,5 +243,5 @@ export function buildTerrain(quality) {
   outer.receiveShadow = false;
   outer.name = 'ranges';
 
-  return { mesh, outer, snowMat, outerMat };
+  return { mesh, outer, snowMat, outerMat, surfaceAt };
 }

@@ -20,6 +20,7 @@ const GradeShader = {
     uStreakColor: { value: new THREE.Color(1, 0.9, 0.7) },
     uAspect: { value: 1.6 },
     uTime: { value: 0 },
+    uBlur: { value: 0 },
   },
   vertexShader: /* glsl */ `
     varying vec2 vUv;
@@ -36,10 +37,19 @@ const GradeShader = {
     uniform vec3 uStreakColor;
     uniform float uAspect;
     uniform float uTime;
+    uniform float uBlur;
     varying vec2 vUv;
     float hash(vec2 p) { return fract(sin(dot(p, vec2(12.9898, 78.233))) * 43758.5453); }
     void main() {
       vec3 c = texture2D(tDiffuse, vUv).rgb;
+      // radial speed blur toward the screen edges
+      if (uBlur > 0.001) {
+        vec2 dir = vUv - 0.5;
+        float w = smoothstep(0.08, 0.55, length(dir * vec2(uAspect * 0.6, 1.0)));
+        vec3 acc = c;
+        for (int i = 1; i < 8; i++) acc += texture2D(tDiffuse, vUv - dir * float(i) * 0.011 * uBlur * w).rgb;
+        c = acc / 8.0;
+      }
       // thin streaks radiating from the sun (screen space)
       if (uStreaks > 0.0 && uSun.z > 0.0) {
         vec2 v = (vUv - uSun.xy) * vec2(uAspect, 1.0);
