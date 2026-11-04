@@ -14,32 +14,7 @@ const nFar = makeNoise2D(CONFIG.SEED + 5);
 const nBump = makeNoise2D(CONFIG.SEED + 6);
 
 // Вершина в северной части карты, главный склон смотрит на юг (+Z).
-export const PEAK_UV = { u: 0.04, v: -0.62 };
-
-// Главный гребень массива (с запада на восток) с высотой каждой точки (доля от H).
-const CREST = [
-  [-1.25, -0.5, 0.42], [-0.75, -0.7, 0.66], [-0.38, -0.6, 0.74], [0.04, -0.62, 1.0],
-  [0.42, -0.74, 0.8], [0.78, -0.64, 0.66], [1.25, -0.48, 0.42],
-];
-
-// Отроги, спускающиеся от гребня на юг; между ними — цирки и кулуары.
-const RIDGES = [
-  { a: [0.04, -0.62], b: [-0.62, 0.62], h: 70, w: 0.075 },
-  { a: [0.04, -0.62], b: [0.72, 0.5], h: 64, w: 0.07 },
-  { a: [-0.38, -0.6], b: [-0.95, 0.1], h: 46, w: 0.065 },
-  { a: [0.42, -0.74], b: [1.0, -0.1], h: 40, w: 0.06 },
-  { a: [0.02, -0.4], b: [0.08, 0.35], h: 26, w: 0.055 },
-];
-
-function crestInfo(u, v) {
-  let best = 1e9, bh = 0, bt = 0;
-  for (let i = 0; i < CREST.length - 1; i++) {
-    const a = CREST[i], b = CREST[i + 1];
-    const [d, t] = segDist(u, v, a[0], a[1], b[0], b[1]);
-    if (d < best) { best = d; bt = t; bh = a[2] + (b[2] - a[2]) * t; }
-  }
-  return [best, bh];
-}
+export const PEAK_UV = { u: 0.04, v: -0.6 };
 
 function fbm(n, x, z, oct) {
   let sum = 0, amp = 0.5, f = 1;
@@ -47,92 +22,50 @@ function fbm(n, x, z, oct) {
   return sum;
 }
 
-function ridged(n, x, z, oct) {
-  let sum = 0, amp = 0.55, f = 1, prev = 1;
-  for (let i = 0; i < oct; i++) {
-    let v = 1 - Math.abs(n(x * f, z * f));
-    v *= v;
-    sum += v * amp * prev;
-    prev = v;
-    f *= 2.1; amp *= 0.5;
-  }
-  return sum;
-}
-
-function segDist(px, pz, ax, az, bx, bz) {
-  const abx = bx - ax, abz = bz - az;
-  let t = ((px - ax) * abx + (pz - az) * abz) / (abx * abx + abz * abz);
-  t = t < 0 ? 0 : t > 1 ? 1 : t;
-  const dx = px - (ax + abx * t), dz = pz - (az + abz * t);
-  return [Math.sqrt(dx * dx + dz * dz), t];
-}
-
 // Высота поверхности в мировых координатах (метры).
+// Стиль: гладкие, «надутые» формы — округлая вершина, широкие ложбины-халфпайпы
+// вдоль склона, плавные валы-«роллеры» поперёк склона и мягкие снежные дюны.
+// Никакого мелкого шума: всё, что меньше ~25 м, сглажено.
 export function heightAt(x, z) {
   const u = x / HALF, v = z / HALF;
 
-  // искажение, чтобы форма горы была неровной
-  const wu = u + nWarp(u * 0.8 + 3.1, v * 0.8) * 0.13;
-  const wv = v + nWarp(u * 0.8 - 7.3, v * 0.8 + 2.2) * 0.13;
-
-  let dx = wu - PEAK_UV.u, dz = wv - PEAK_UV.v;
-  const dzs = dz > 0 ? dz / 1.8 : dz / 0.85;
-  const dxs = dx / 1.1;
+  const wu = u + nWarp(u * 0.7 + 3.1, v * 0.7) * 0.1;
+  const wv = v + nWarp(u * 0.7 - 7.3, v * 0.7 + 2.2) * 0.1;
+  const dx = wu - PEAK_UV.u, dz = wv - PEAK_UV.v;
+  const dzs = dz > 0 ? dz / 1.75 : dz / 0.8;
+  const dxs = dx / 1.15;
   const r = Math.sqrt(dxs * dxs + dzs * dzs);
 
-  // основной массив: гребень с вогнутым южным склоном и крутой северной стеной
-  const [cd, chRaw] = crestInfo(wu, wv);
-  const ch = chRaw * (0.94 + 0.06 * nBig(wu * 3.0, 7.7));
-  const crestV = wv; // знак: южнее гребня — главный склон
-  let south = true;
-  {
-    // ближайшая точка гребня по u — для определения стороны
-    let cv = CREST[0][1];
-    for (let i = 0; i < CREST.length - 1; i++) {
-      const a = CREST[i], b = CREST[i + 1];
-      if (wu >= a[0] && wu <= b[0]) { cv = a[1] + (b[1] - a[1]) * (wu - a[0]) / (b[0] - a[0]); break; }
-      if (wu > b[0]) cv = b[1];
-    }
-    south = crestV > cv;
-  }
-  const prof = south ? Math.exp(-Math.pow(cd / 0.92, 1.2) * 1.7) : Math.exp(-Math.pow(cd / 0.4, 1.1) * 1.7);
-  let h = H * ch * prof;
-  // остроконечная вершина над гребнем
-  h += H * 0.16 * Math.exp(-Math.pow(r / 0.17, 1.15));
-  const massif = Math.exp(-r * 1.2);
+  // купол горы: округлая вершина, длинный плавный склон
+  const t = Math.min(1, r / 1.2);
+  let h = H * Math.pow(1 - t * t * (3 - 2 * t), 1.25);
+  const massif = 1 - smoothstep(0.0, 1.3, r);
 
-  // хребты
-  for (let i = 0; i < RIDGES.length; i++) {
-    const R = RIDGES[i];
-    const [d, t] = segDist(wu, wv, R.a[0], R.a[1], R.b[0], R.b[1]);
-    const k = d / R.w;
-    h += R.h * Math.exp(-k * k) * (1 - 0.55 * t);
-  }
+  // широкие плечи и пологие террасы
+  h += fbm(nBig, u * 1.3 + 10, v * 1.3, 3) * 42;
 
-  // крупные холмы и впадины
-  h += fbm(nBig, u * 1.6 + 10, v * 1.6, 3) * (34 + 30 * massif);
-
-  // кулуары и гребешки вдоль линии падения (радиально от вершины)
+  // ложбины и гребни вдоль линии падения (радиально от вершины), гладкие
   const theta = Math.atan2(dx, dz);
-  const backFade = smoothstep(-0.2, 0.08, dz);
-  const rad = ridged(nRad, theta * 3.0, r * 3.0, 3);
-  h += (rad - 0.42) * 40 * backFade * smoothstep(0.05, 0.3, r) * (0.45 + massif) * (south ? 1 : 0.4);
+  const slopeZone = smoothstep(0.06, 0.3, r) * smoothstep(-0.15, 0.1, dz);
+  h += nRad(theta * 2.4, r * 1.3) * 17 * slopeZone * (0.5 + massif);
 
-  // мягкие снежные волны и «подушки»
-  h += fbm(nPil, x / 130, z / 130, 3) * 6.0;
-  h += nBump(x / 34, z / 34) * 0.8;
+  // валы поперёк склона — как волны в видео
+  h += nPil(theta * 7.5 + 20, r * 11.0) * 5.5 * slopeZone;
+  h += nBump(theta * 13.0 - 7, r * 19.0) * 2.0 * slopeZone;
 
-  // за краем карты склоны уходят вниз, в море облаков
+  // мягкие снежные дюны
+  h += fbm(nPil, x / 75 + 50, z / 75, 2) * 3.2;
+
+  // за краем карты — пологий спуск в дымку
   const au = Math.abs(u), av = Math.abs(v);
-  const edge = Math.pow(au * au * au * au + av * av * av * av, 0.25) + nWarp(u * 1.7 + 30, v * 1.7) * 0.12;
-  h -= 470 * smoothstep(1.0, 1.75, edge);
+  const edge = Math.pow(au * au * au * au + av * av * av * av, 0.25) + nWarp(u * 1.7 + 30, v * 1.7) * 0.1;
+  h -= 380 * smoothstep(1.0, 1.8, edge);
 
-  // далёкие хребты на горизонте
+  // далёкие округлые горы, тонущие в дымке
   const dist = Math.sqrt(u * u + v * v);
-  if (dist > 2.4) {
-    const fr = ridged(nFar, u * 0.22 + 4, v * 0.22 - 2, 3);
-    const big = nFar(u * 0.09 + 40, v * 0.09) * 0.5 + 0.5;
-    h += (fr * (800 + 1300 * big) - 150) * smoothstep(3.0, 5.2, dist);
+  if (dist > 2.6) {
+    const fr = fbm(nFar, u * 0.3 + 4, v * 0.3 - 2, 3) * 0.5 + 0.5;
+    h += (fr * fr * 650 - 60) * smoothstep(3.0, 5.5, dist);
   }
   return h;
 }

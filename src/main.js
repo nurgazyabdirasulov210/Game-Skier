@@ -3,11 +3,12 @@ import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
 import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
 import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
+import { ShaderPass } from 'three/addons/postprocessing/ShaderPass.js';
 
 import { CONFIG, QUALITY_PRESETS, pickQuality } from './config.js';
 import { TerrainGrid, buildFarTerrain, heightAt, insideMap, PEAK_UV } from './terrain.js';
 import { makeTerrainMaterial, SHARED } from './materials.js';
-import { buildWorld, buildClouds, makeSampler, makeViewpoints } from './world.js';
+import { buildWorld, makeSampler, makeViewpoints } from './world.js';
 import { createSky, createSnowfall } from './sky.js';
 import { TimeOfDay } from './timeOfDay.js';
 import { FlyControls, Tour } from './controls.js';
@@ -59,10 +60,9 @@ async function init() {
   const world = buildWorld(scene, grid, Q);
 
   await status('Снег и рельеф…');
-  const terrainMat = makeTerrainMaterial(Q);
+  const terrainMat = makeTerrainMaterial();
   scene.add(grid.buildChunks(terrainMat));
   scene.add(buildFarTerrain(terrainMat));
-  buildClouds(scene, world.cloudMat);
 
   const snowfall = createSnowfall(Q.snowflakes);
   scene.add(snowfall.points);
@@ -70,19 +70,36 @@ async function init() {
   const { sample } = makeSampler(grid);
   const groundAt = (x, z) => (insideMap(x, z, 2) ? sample(x, z) : heightAt(x, z));
 
-  const tod = new TimeOfDay({ renderer, scene, sun, hemi, sky, shared: SHARED, snowfall, cloudMat: world.cloudMat });
+  const tod = new TimeOfDay({ renderer, scene, sun, hemi, sky, shared: SHARED, snowfall });
 
   // ---------- постобработка
   let composer = null, bloom = null;
-  if (Q.bloom) {
-    const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: 4 });
+  {
+    const rt = new THREE.WebGLRenderTarget(innerWidth, innerHeight, { type: THREE.HalfFloatType, samples: Q.bloom ? 4 : 2 });
     composer = new EffectComposer(renderer, rt);
     composer.setPixelRatio(renderer.getPixelRatio());
     composer.setSize(innerWidth, innerHeight);
     composer.addPass(new RenderPass(scene, camera));
-    bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.3, 0.55, 0.92);
-    composer.addPass(bloom);
+    if (Q.bloom) {
+      bloom = new UnrealBloomPass(new THREE.Vector2(innerWidth, innerHeight), 0.35, 0.7, 0.92);
+      composer.addPass(bloom);
+    }
     composer.addPass(new OutputPass());
+    // цветокоррекция: сочные цвета и лёгкая виньетка, как в видео
+    composer.addPass(new ShaderPass({
+      uniforms: { tDiffuse: { value: null }, uSat: { value: 1.22 }, uVig: { value: 0.32 } },
+      vertexShader: 'varying vec2 vUv; void main(){ vUv = uv; gl_Position = projectionMatrix * modelViewMatrix * vec4(position, 1.0); }',
+      fragmentShader: `
+        uniform sampler2D tDiffuse; uniform float uSat, uVig; varying vec2 vUv;
+        void main(){
+          vec3 c = texture2D(tDiffuse, vUv).rgb;
+          float l = dot(c, vec3(0.299, 0.587, 0.114));
+          c = mix(vec3(l), c, uSat);
+          float v = smoothstep(0.95, 0.25, length((vUv - 0.5) * vec2(1.25, 1.0)));
+          c *= mix(1.0, v, uVig);
+          gl_FragColor = vec4(clamp(c, 0.0, 1.0), 1.0);
+        }`,
+    }));
   }
 
   // ---------- камера и управление
@@ -165,7 +182,10 @@ async function init() {
       lodTimer = 0.25;
     }
     updateShadow();
-    if (bloom) bloom.strength = tod.state.stars > 0.5 ? 0.42 : 0.26;
+    // чем выше камера над снегом, тем прозрачнее дымка (у земли — как в видео)
+    const above = Math.max(0, camera.position.y - groundAt(camera.position.x, camera.position.z) - 30);
+    scene.fog.density = tod.state.fogD / (1 + above / 120);
+    if (bloom) bloom.strength = 0.22 + 0.35 * Math.min(1, tod.state.aurora + Math.max(0, tod.state.rays - 0.3));
 
     if (composer) composer.render(); else renderer.render(scene, camera);
 

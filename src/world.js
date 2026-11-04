@@ -5,17 +5,17 @@ import { Scatter, Occupancy } from './scatter.js';
 import { PEAK_UV, heightAt } from './terrain.js';
 import {
   makeBirch, makePine, makeSpruce, makeSnag, makeLog, makeStump,
-  makeRock, makeCliff, makeArch, makeCloud, makeBush,
+  makeRock, makeCliff, makeArch, makeBush,
 } from './geometry.js';
 import { makeFoliageMaterial, makeSpruceMaterial, makeSnowyMaterial } from './materials.js';
-import { makeFurTexture, makeCloudTexture, makeBirchBarkTexture } from './textures.js';
+import { makeFurTexture, makeBirchBarkTexture } from './textures.js';
 
 const S = CONFIG.MAP_SIZE;
 const HALF = S / 2;
 const H = CONFIG.PEAK_HEIGHT;
 
 const C = (hex) => new THREE.Color(hex);
-const BIRCH_ORANGE = ['#ff9b40', '#ffab4d', '#f78a35', '#ffbb58', '#ff8f3a', '#ffa244'].map(C);
+const BIRCH_ORANGE = ['#ff8f3a', '#ff9d45', '#f7802f', '#ffa850', '#ff8a36', '#ff9640'].map(C);
 const BIRCH_CREAM = ['#f4dc8a', '#efd27a', '#f7e3a2', '#e9d88e'].map(C);
 const BIRCH_RED = ['#f06a3c', '#e85a36', '#f37b45'].map(C);
 const PINE_CROWN = ['#d8dca4', '#cdd696', '#e6e2b4', '#bfcf8e', '#d2d9a0'].map(C);
@@ -54,19 +54,18 @@ export function buildWorld(scene, grid, quality, onProgress = () => {}) {
 
   // ---------- материалы и текстуры
   const furTex = makeFurTexture();
-  const cloudTex = makeCloudTexture();
   const barkTex = makeBirchBarkTexture();
   const mats = {
     crown: makeFoliageMaterial(furTex, { key: 'crown', alphaToCoverage: msaa }),
-    cloud: makeFoliageMaterial(cloudTex, { key: 'cloud', translucency: 0.9 }),
     spruce: makeSpruceMaterial(),
     birchBark: makeSnowyMaterial(0xffffff, { key: 'birchBark', map: barkTex, snowLo: 0.55, snowHi: 0.85, amount: 0.9 }),
     pineBark: makeSnowyMaterial(0x4a3f3a, { key: 'pineBark', snowLo: 0.5, snowHi: 0.85 }),
     snag: makeSnowyMaterial(0x6f655c, { key: 'snag', snowLo: 0.35, snowHi: 0.7 }),
-    log: makeSnowyMaterial(0x58483d, { key: 'log', snowLo: 0.1, snowHi: 0.45, speckle: 0.5 }),
-    rock: makeSnowyMaterial(0x2c3350, { key: 'rock', snowLo: 0.38, snowHi: 0.68, speckle: 0.8 }),
-    cliff: makeSnowyMaterial(0x2a3150, { key: 'cliff', snowLo: 0.3, snowHi: 0.62, speckle: 1.0 }),
-    arch: makeSnowyMaterial(0x2a3050, { key: 'arch', snowLo: 0.38, snowHi: 0.7, speckle: 1.0 }),
+    log: makeSnowyMaterial(0xffffff, { key: 'log', map: barkTex, snowLo: 0.2, snowHi: 0.5, speckle: 0.9, blotch: 0.8, blotchScale: 0.9 }),
+    stump: makeSnowyMaterial(0x4a3f3a, { key: 'stump', snowLo: 0.3, snowHi: 0.6 }),
+    rock: makeSnowyMaterial(0x1e2546, { key: 'rock', snowLo: 0.93, snowHi: 0.99, speckle: 0.2, amount: 0.6 }),
+    cliff: makeSnowyMaterial(0x1b2142, { key: 'cliff', snowLo: 0.94, snowHi: 0.995, speckle: 0.2, amount: 0.55 }),
+    arch: makeSnowyMaterial(0x1e2446, { key: 'arch', snowLo: 0.7, snowHi: 0.9, speckle: 0.4, blotch: 0.85, blotchScale: 0.75 }),
   };
 
   const scatters = [];
@@ -79,17 +78,17 @@ export function buildWorld(scene, grid, quality, onProgress = () => {}) {
   const arches = [];
   const archMesh = [];
   let tries = 0;
-  while (arches.length < 4 && tries++ < 4000) {
+  while (arches.length < 6 && tries++ < 6000) {
     const x = (rng() - 0.5) * S * 0.8, z = (rng() - 0.5) * S * 0.8;
     const h = sample(x, z);
     const a = alt(h);
     normal(x, z, nrm);
     if (a < 0.18 || a > 0.75 || nrm.y < 0.86 || nrm.y > 0.985) continue;
-    if (arches.some((p) => Math.hypot(p.x - x, p.z - z) < 380)) continue;
+    if (arches.some((p) => Math.hypot(p.x - x, p.z - z) < 300)) continue;
     const fall = Math.atan2(nrm.x, nrm.z);
     const scale = 0.95 + rng() * 0.45;
-    const geo = makeArch(rng, { span: 14 + rng() * 6, height: 20 + rng() * 8 });
-    const halfW = 11 * scale;
+    const geo = makeArch(rng, { width: 6 + rng() * 2.5, height: 11 + rng() * 4 });
+    const halfW = 4.5 * scale;
     const cx = Math.cos(fall), cz = -Math.sin(fall);
     const y = Math.min(h, sample(x + cx * halfW, z + cz * halfW), sample(x - cx * halfW, z - cz * halfW)) - 0.6;
     const m = new THREE.Mesh(geo, mats.arch);
@@ -99,59 +98,57 @@ export function buildWorld(scene, grid, quality, onProgress = () => {}) {
     m.castShadow = true; m.receiveShadow = true;
     archMesh.push(m);
     arches.push({ x, z, y, fall, scale });
-    occ.add(x, z, 30 * scale);
-    grid.stamp(x + cx * halfW, z + cz * halfW, 7, 0.35);
-    grid.stamp(x - cx * halfW, z - cz * halfW, 7, 0.35);
+    occ.add(x, z, 16 * scale);
+    grid.stamp(x, z, 9, 0.25);
   }
   onProgress('Скалы и камни');
 
   // ---------- скальные плиты
   const cliffGeos = [0, 1, 2].map(() => makeCliff(rng));
   const cliffs = cliffGeos.map((g, i) => mk('cliff' + i, [{ parts: [{ geometry: g, material: mats.cliff }], maxDist: far * 1.4 }]));
-  for (let z = -HALF + 30; z < HALF - 30; z += 55) {
-    for (let x = -HALF + 30; x < HALF - 30; x += 55) {
-      const px = x + (rng() - 0.5) * 45, pz = z + (rng() - 0.5) * 45;
+  for (let z = -HALF + 20; z < HALF - 20; z += 40) {
+    for (let x = -HALF + 20; x < HALF - 20; x += 40) {
+      const px = x + (rng() - 0.5) * 36, pz = z + (rng() - 0.5) * 36;
       const h = sample(px, pz); normal(px, pz, nrm);
-      const a = alt(h);
-      const p = 0.85 * smoothstep(0.8, 0.6, nrm.y) + 0.3 * smoothstep(0.82, 0.97, a) + 0.08 * smoothstep(0.3, 0.6, fbm(nRock, px / 300, pz / 300));
+      const field = smoothstep(0.1, 0.5, fbm(nRock, px / 220, pz / 220));
+      const p = 0.06 + 0.4 * field + 0.3 * smoothstep(0.9, 0.78, nrm.y);
       if (rng() > p) continue;
-      const sx = 9 + rng() * 14, sy = 7 + rng() * 10, sz = 7 + rng() * 9;
+      const sx = 3 + rng() * 5, sy = 2.2 + rng() * 3.5, sz = 2.5 + rng() * 3.5;
       const r = Math.max(sx, sz) * 0.85;
       if (!occ.free(px, pz, r * 0.6)) continue;
       const fall = Math.atan2(nrm.x, nrm.z);
-      pick(cliffs).add(px, h - sy * 0.45, pz, fall + (rng() - 0.5) * 0.6, new THREE.Vector3(sx, sy, sz), null, -0.15 - rng() * 0.2, (rng() - 0.5) * 0.2);
+      pick(cliffs).add(px, h - sy * 0.35, pz, fall + (rng() - 0.5) * 2.0, new THREE.Vector3(sx, sy, sz), null, (rng() - 0.5) * 0.5, (rng() - 0.5) * 0.4);
       occ.add(px, pz, r);
       grid.stamp(px, pz, r * 1.4, 0.35);
     }
   }
 
   // ---------- валуны и камни
-  const rockGeos = [0, 1, 2, 3, 4].map((i) => makeRock(rng, i < 2 ? 2 : 1));
+  const rockGeos = [0, 1, 2, 3, 4].map(() => makeRock(rng));
   const boulders = rockGeos.slice(0, 3).map((g, i) => mk('boulder' + i, [{ parts: [{ geometry: g, material: mats.rock }], maxDist: far }]));
   const pebbles = rockGeos.slice(2).map((g, i) => mk('rock' + i, [{ parts: [{ geometry: g, material: mats.rock }], maxDist: near * 1.1 }], { castShadow: true }));
-  for (let z = -HALF + 10; z < HALF - 10; z += 22) {
-    for (let x = -HALF + 10; x < HALF - 10; x += 22) {
-      const px = x + (rng() - 0.5) * 20, pz = z + (rng() - 0.5) * 20;
+  for (let z = -HALF + 10; z < HALF - 10; z += 30) {
+    for (let x = -HALF + 10; x < HALF - 10; x += 30) {
+      const px = x + (rng() - 0.5) * 28, pz = z + (rng() - 0.5) * 28;
       const h = sample(px, pz); normal(px, pz, nrm);
-      const a = alt(h);
-      const field = smoothstep(0.25, 0.55, fbm(nRock, px / 160 + 9, pz / 160));
-      const p = (0.04 + 0.45 * smoothstep(0.86, 0.68, nrm.y) + 0.25 * smoothstep(0.8, 0.95, a) + 0.5 * field) * Math.sqrt(D);
+      const field = smoothstep(0.1, 0.5, fbm(nRock, px / 220, pz / 220));
+      const p = (0.04 + 0.3 * field + 0.2 * smoothstep(0.9, 0.78, nrm.y)) * Math.sqrt(D);
       if (rng() > p) continue;
-      const s = 2.5 + Math.pow(rng(), 2) * 6;
+      const s = 1.6 + Math.pow(rng(), 2) * 3;
       if (!occ.free(px, pz, s * 0.8)) continue;
       pick(boulders).add(px, h - s * 0.3, pz, rng() * 6.28, new THREE.Vector3(s * (0.8 + rng() * 0.4), s * (0.7 + rng() * 0.5), s * (0.8 + rng() * 0.4)), null, (rng() - 0.5) * 0.4, (rng() - 0.5) * 0.4);
       occ.add(px, pz, s * 1.1);
       grid.stamp(px, pz, s * 1.8, 0.3);
     }
   }
-  for (let z = -HALF + 4; z < HALF - 4; z += 9) {
-    for (let x = -HALF + 4; x < HALF - 4; x += 9) {
-      const px = x + (rng() - 0.5) * 8.5, pz = z + (rng() - 0.5) * 8.5;
+  for (let z = -HALF + 4; z < HALF - 4; z += 15) {
+    for (let x = -HALF + 4; x < HALF - 4; x += 15) {
+      const px = x + (rng() - 0.5) * 14, pz = z + (rng() - 0.5) * 14;
       const h = sample(px, pz); normal(px, pz, nrm);
-      const field = smoothstep(0.2, 0.55, fbm(nRock, px / 160 + 9, pz / 160));
-      const p = (0.015 + 0.2 * smoothstep(0.88, 0.7, nrm.y) + 0.25 * field + 0.1 * smoothstep(0.85, 0.97, alt(h))) * D;
+      const field = smoothstep(0.1, 0.5, fbm(nRock, px / 220, pz / 220));
+      const p = (0.015 + 0.12 * field) * D;
       if (rng() > p) continue;
-      const s = 0.4 + Math.pow(rng(), 2.2) * 2.0;
+      const s = 0.5 + Math.pow(rng(), 2) * 1.0;
       if (!occ.free(px, pz, s * 0.6)) continue;
       pick(pebbles).add(px, h - s * 0.25, pz, rng() * 6.28, new THREE.Vector3(s, s * (0.6 + rng() * 0.6), s * (0.8 + rng() * 0.4)), null, (rng() - 0.5) * 0.5, (rng() - 0.5) * 0.5);
       occ.add(px, pz, s * 0.7);
@@ -206,8 +203,8 @@ export function buildWorld(scene, grid, quality, onProgress = () => {}) {
   ]));
   const birchPalette = (px, pz) => {
     const cn = nCol(px / 380, pz / 380) + (rng() - 0.5) * 0.25;
-    if (cn > 0.38) return BIRCH_CREAM;
-    if (cn < -0.5) return BIRCH_RED;
+    if (cn > 0.62) return BIRCH_CREAM;
+    if (cn < -0.42) return BIRCH_RED;
     return BIRCH_ORANGE;
   };
   for (let z = -HALF + 4; z < HALF - 4; z += 8) {
@@ -282,7 +279,7 @@ export function buildWorld(scene, grid, quality, onProgress = () => {}) {
   const logGeos = [0, 1, 2].map(() => makeLog(rng));
   const logs = logGeos.map((g, i) => mk('log' + i, [{ parts: [{ geometry: g, material: mats.log }], maxDist: near * 1.3 }]));
   const stumpGeos = [0, 1].map(() => makeStump(rng));
-  const stumps = stumpGeos.map((g, i) => mk('stump' + i, [{ parts: [{ geometry: g, material: mats.log }], maxDist: near }]));
+  const stumps = stumpGeos.map((g, i) => mk('stump' + i, [{ parts: [{ geometry: g, material: mats.stump }], maxDist: near }]));
   for (let z = -HALF + 6; z < HALF - 6; z += 14) {
     for (let x = -HALF + 6; x < HALF - 6; x += 14) {
       const px = x + (rng() - 0.5) * 13, pz = z + (rng() - 0.5) * 13;
@@ -339,52 +336,7 @@ export function buildWorld(scene, grid, quality, onProgress = () => {}) {
   }
   stats.arch = arches.length;
 
-  return { scatters: live, arches, treeSpots, stats, mats, cloudMat: mats.cloud, occ };
-}
-
-// ------------------------------------------------------------- облака
-export function buildClouds(scene, material) {
-  const rng = mulberry32(CONFIG.SEED + 900);
-  const geos = [0, 1, 2, 3].map(() => makeCloud(rng));
-  const group = new THREE.Group();
-  group.name = 'clouds';
-  const place = [];
-  // «море облаков» под горой
-  for (let i = 0; i < 420; i++) {
-    const a = rng() * Math.PI * 2;
-    const r = HALF * 1.25 + Math.pow(rng(), 0.8) * HALF * 4.2;
-    const x = Math.cos(a) * r, z = Math.sin(a) * r;
-    const ground = heightAt(x, z);
-    const y = -190 + rng() * 60;
-    if (ground > y + 40) continue;
-    place.push([x, y, z, 1.4 + rng() * 1.4, 0.5 + rng() * 0.3]);
-  }
-  // высокие облака
-  for (let i = 0; i < 26; i++) {
-    const a = rng() * Math.PI * 2;
-    const r = HALF * 1.5 + rng() * HALF * 4.5;
-    place.push([Math.cos(a) * r, 1250 + rng() * 600, Math.sin(a) * r, 1.6 + rng() * 1.4, 0.45 + rng() * 0.2]);
-  }
-  const per = geos.map(() => []);
-  place.forEach((p) => per[Math.floor(rng() * geos.length)].push(p));
-  const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), s = new THREE.Vector3(), v = new THREE.Vector3();
-  const white = new THREE.Color(1, 1, 1);
-  geos.forEach((g, gi) => {
-    const list = per[gi];
-    if (!list.length) return;
-    const mesh = new THREE.InstancedMesh(g, material, list.length);
-    list.forEach(([x, y, z, sc, sy], i) => {
-      q.setFromAxisAngle(new THREE.Vector3(0, 1, 0), rng() * Math.PI * 2);
-      m4.compose(v.set(x, y, z), q, s.set(sc, sc * sy, sc));
-      mesh.setMatrixAt(i, m4);
-      mesh.setColorAt(i, white);
-    });
-    mesh.computeBoundingSphere();
-    mesh.frustumCulled = false;
-    group.add(mesh);
-  });
-  scene.add(group);
-  return group;
+  return { scatters: live, arches, treeSpots, stats, mats, occ };
 }
 
 // Точки обзора для быстрого перелёта камеры.
@@ -403,23 +355,17 @@ export function makeViewpoints(world, sample) {
       for (let k = 0; k < 12; k++) {
         const a = k / 12 * Math.PI * 2 + ring;
         const x = x0 + Math.cos(a) * ring * 3, z = z0 + Math.sin(a) * ring * 3;
-        if (world.treeSpots.every((t) => (t.x - x) ** 2 + (t.z - z) ** 2 > r * r)) return { x, z };
+        if (world.occ.free(x, z, r)) return { x, z };
       }
     }
     return { x: x0, z: z0 };
   };
   vps.push({ name: 'Вершина', pos: new THREE.Vector3(px, ph + 28, pz + 35), look: new THREE.Vector3(px, sample(px, pz + 700) - 30, pz + 700) });
-  {
-    // вид с высоты над серединой главного склона — вниз, на леса и рощи
-    const sx = 40, sz = -170;
-    const lx = -60, lz = 520;
-    vps.push({ name: 'Склон', pos: new THREE.Vector3(sx, sample(sx, sz) + 32, sz), look: new THREE.Vector3(lx, sample(lx, lz), lz) });
-  }
   if (world.arches.length) {
     const a = world.arches[0];
     const fx = Math.sin(a.fall), fz = Math.cos(a.fall);
-    const cx = a.x - fx * 45, cz = a.z - fz * 45;
-    vps.push({ name: 'Арка', pos: new THREE.Vector3(cx, sample(cx, cz) + 6, cz), look: new THREE.Vector3(a.x, a.y + 10 * a.scale, a.z) });
+    const cx = a.x - fx * 30, cz = a.z - fz * 30;
+    vps.push({ name: 'Арка', pos: new THREE.Vector3(cx, sample(cx, cz) + 3, cz), look: new THREE.Vector3(a.x, a.y + 10 * a.scale, a.z) });
   }
   const best = (kind) => {
     const bins = new Map();
@@ -436,12 +382,22 @@ export function makeViewpoints(world, sample) {
   const b = best('birch');
   if (b) {
     const p = clear(b.x, b.z - 25, 6);
-    vps.push({ name: 'Берёзы', pos: new THREE.Vector3(p.x, sample(p.x, p.z) + 3.5, p.z), look: new THREE.Vector3(b.x, sample(b.x, b.z + 40) + 4, b.z + 40) });
+    vps.push({ name: 'Берёзы', pos: new THREE.Vector3(p.x, sample(p.x, p.z) + 2.2, p.z), look: new THREE.Vector3(b.x, sample(b.x, b.z + 40) + 4, b.z + 40) });
   }
   const s = best('spruce');
   if (s) {
     const p = clear(s.x, s.z - 15, 6);
     vps.push({ name: 'Ельник', pos: new THREE.Vector3(p.x, sample(p.x, p.z) + 3, p.z), look: new THREE.Vector3(s.x, sample(s.x, s.z + 40) + 3, s.z + 40) });
+  }
+  // «Склон» — на высоте лыжника у края рощи, вниз по линии падения (как в видео)
+  if (b) {
+    const n = new THREE.Vector3();
+    const e = 8;
+    n.set(sample(b.x - e, b.z) - sample(b.x + e, b.z), 2 * e, sample(b.x, b.z - e) - sample(b.x, b.z + e)).normalize();
+    const fl = Math.hypot(n.x, n.z) || 1, fx = n.x / fl, fz = n.z / fl;
+    const p = clear(b.x - fx * 40, b.z - fz * 40, 5);
+    const lx = p.x + fx * 90, lz = p.z + fz * 90;
+    vps.unshift({ name: 'Склон', pos: new THREE.Vector3(p.x, sample(p.x, p.z) + 2.6, p.z), look: new THREE.Vector3(lx, sample(lx, lz) + 1.5, lz) });
   }
   vps.push({ name: 'Обзор', pos: new THREE.Vector3(250, 820, HALF * 2.3), look: new THREE.Vector3(px, 300, pz) });
   return vps;

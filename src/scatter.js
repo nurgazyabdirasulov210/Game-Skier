@@ -74,6 +74,7 @@ export class Scatter {
         mesh.instanceMatrix.needsUpdate = true;
         if (mesh.instanceColor) mesh.instanceColor.needsUpdate = true;
         mesh.castShadow = this.castShadow && part.castShadow !== false;
+        if (part.material.userData.depth) mesh.customDepthMaterial = part.material.userData.depth;
         mesh.receiveShadow = this.receiveShadow;
         mesh.computeBoundingSphere();
         mesh.visible = false;

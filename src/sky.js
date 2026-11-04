@@ -12,7 +12,7 @@ export function createSky(quality) {
     uMoonDir: { value: new THREE.Vector3(0, 1, 0) },
     uStars: { value: 0 },
     uAurora: { value: 0 },
-    uCirrus: { value: 0.5 },
+    uRays: { value: 0 },
     uTime: { value: 0 },
   };
   const material = new THREE.ShaderMaterial({
@@ -31,7 +31,7 @@ export function createSky(quality) {
     `,
     fragmentShader: /* glsl */`
       uniform vec3 uZenith, uHorizon, uGround, uSunDir, uSunColor, uMoonDir;
-      uniform float uSunGlow, uStars, uAurora, uCirrus, uTime;
+      uniform float uSunGlow, uStars, uAurora, uRays, uTime;
       varying vec3 vDir;
 
       float h12(vec2 p){ vec3 p3 = fract(vec3(p.xyx) * 0.1031); p3 += dot(p3, p3.yzx + 33.33); return fract((p3.x + p3.y) * p3.z); }
@@ -76,21 +76,28 @@ export function createSky(quality) {
         vec3 d = normalize(vDir);
         float y = d.y;
         float up = max(y, 0.0);
-        vec3 col = mix(uHorizon, uZenith, pow(smoothstep(0.0, 1.0, up), 0.55));
+        vec3 col = mix(uHorizon, uZenith, 1.0 - pow(1.0 - up, 7.0));
         col = mix(col, uGround, smoothstep(0.0, -0.18, y));
 
         // солнце: ореол + диск
         float sd = max(dot(d, uSunDir), 0.0);
-        col += uSunColor * (pow(sd, 6.0) * 0.28 + pow(sd, 48.0) * 0.55 + pow(sd, 600.0) * 1.5) * uSunGlow;
+        col += uSunColor * (pow(sd, 8.0) * 0.16 + pow(sd, 48.0) * 0.5 + pow(sd, 600.0) * 1.5) * uSunGlow;
         col += uSunColor * smoothstep(0.99935, 0.99965, sd) * 9.0 * uSunGlow;
 
-        // перистые облака
-        if (y > 0.0 && uCirrus > 0.0) {
-          vec2 q = d.xz / (y + 0.12) * 1.2;
-          float c = fbm2(q * vec2(1.0, 3.2) + vec2(uTime * 0.004, 0.0));
-          c = smoothstep(0.52, 0.85, c) * smoothstep(0.0, 0.25, y);
-          vec3 cc = mix(uHorizon * 1.15, uSunColor * 0.9 + uHorizon * 0.4, pow(sd, 4.0));
-          col = mix(col, cc, c * uCirrus * 0.55);
+        // длинные тонкие лучи от солнца
+        if (uRays > 0.0 && uSunGlow > 0.0) {
+          vec3 tA = normalize(cross(uSunDir, vec3(0.0, 1.0, 0.0)));
+          vec3 tB = cross(tA, uSunDir);
+          vec3 q = d - uSunDir * dot(d, uSunDir);
+          float ang = atan(dot(q, tB), dot(q, tA));
+          float dist = acos(clamp(dot(d, uSunDir), -1.0, 1.0));
+          float rays = 0.0;
+          for (int k = 0; k < 4; k++) {
+            float a0 = 0.55 + float(k) * 1.62 + sin(uTime * 0.05 + float(k)) * 0.04;
+            float da = abs(mod(ang - a0 + 3.14159, 6.28318) - 3.14159);
+            rays += exp(-pow(da * dist * 140.0, 2.0)) * (0.6 + 0.4 * float(k == 0 || k == 2));
+          }
+          col += uSunColor * rays * exp(-dist * 1.4) * smoothstep(0.03, 0.12, dist) * 0.55 * uRays * uSunGlow;
         }
 
         // звёзды

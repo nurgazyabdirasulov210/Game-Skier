@@ -6,25 +6,28 @@ const V3 = THREE.Vector3;
 
 // Простой сборщик геометрии с произвольными атрибутами.
 class Builder {
-  constructor() { this.pos = []; this.nor = []; this.uv = []; this.fol = []; this.col = []; this.idx = []; this.count = 0; }
-  vert(p, n, uv = [0, 0], fol = [1, 0], col = [1, 1, 1]) {
+  constructor() { this.pos = []; this.nor = []; this.uv = []; this.fol = []; this.col = []; this.corner = []; this.idx = []; this.count = 0; this.pad = 0; }
+  vert(p, n, uv = [0, 0], fol = [1, 0], col = [1, 1, 1], corner = [0, 0]) {
     this.pos.push(p.x, p.y, p.z);
     this.nor.push(n.x, n.y, n.z);
     this.uv.push(uv[0], uv[1]);
     this.fol.push(fol[0], fol[1]);
     this.col.push(col[0], col[1], col[2]);
+    this.corner.push(corner[0], corner[1]);
     return this.count++;
   }
   tri(a, b, c) { this.idx.push(a, b, c); }
-  build({ uv = true, fol = true, color = false } = {}) {
+  build({ uv = true, fol = true, color = false, corner = false } = {}) {
     const g = new THREE.BufferGeometry();
     g.setAttribute('position', new THREE.Float32BufferAttribute(this.pos, 3));
     g.setAttribute('normal', new THREE.Float32BufferAttribute(this.nor, 3));
     if (uv) g.setAttribute('uv', new THREE.Float32BufferAttribute(this.uv, 2));
     if (fol) g.setAttribute('aFol', new THREE.Float32BufferAttribute(this.fol, 2));
     if (color) g.setAttribute('color', new THREE.Float32BufferAttribute(this.col, 3));
+    if (corner) g.setAttribute('aCorner', new THREE.Float32BufferAttribute(this.corner, 2));
     g.setIndex(this.idx);
     g.computeBoundingSphere();
+    g.boundingSphere.radius += this.pad; // спрайты больше своих центров
     return g;
   }
 }
@@ -97,95 +100,100 @@ function curvePoints(base, top, segs, wobble, rng) {
 }
 
 // ---------------------------------------------------------------- пушистый шар
-function addFluffyBlob(b, center, r, cards, rng, { snow = 1, cardScale = 1, flatten = 1, aoMin = 0.42 } = {}) {
-  const dir = new V3(), n = new V3(), t = new V3(), bt = new V3(), rnd = new V3(), corner = new V3(), cn = new V3();
+// Шар-крона из спрайтов, развёрнутых к камере (см. makeFoliageMaterial).
+// Центры спрайтов лежат внутри шара, ближе к поверхности; нормали сферические.
+function addFluffyBall(b, center, r, cards, rng, { snow = 1, cardScale = 1, flatten = 0.9, aoMin = 0.5 } = {}) {
+  const dir = new V3();
   const offs = [[-1, -1], [1, -1], [1, 1], [-1, 1]];
   const uvs = [[0, 0], [1, 0], [1, 1], [0, 1]];
+  const golden = Math.PI * (3 - Math.sqrt(5));
   for (let c = 0; c < cards; c++) {
-    let l2;
-    do { dir.set(rng() * 2 - 1, rng() * 2 - 1, rng() * 2 - 1); l2 = dir.lengthSq(); } while (l2 > 1 || l2 < 0.04);
+    // равномерно по сфере (спираль Фибоначчи) + немного случайности
+    const y = 1 - (2 * (c + 0.5)) / cards;
+    const rr = Math.sqrt(1 - y * y);
+    const ang = golden * c + rng() * 0.6;
+    dir.set(Math.cos(ang) * rr, y, Math.sin(ang) * rr);
+    dir.x += (rng() - 0.5) * 0.25; dir.y += (rng() - 0.5) * 0.25; dir.z += (rng() - 0.5) * 0.25;
     dir.normalize();
-    const dist = r * (0.42 + 0.52 * Math.sqrt(rng()));
-    const pc = center.clone().add(new V3(dir.x * dist, dir.y * dist * flatten, dir.z * dist));
-    const size = r * (0.85 + 0.55 * rng()) * cardScale;
-    rnd.set(rng() - 0.5, rng() - 0.5, rng() - 0.5);
-    n.copy(dir).addScaledVector(rnd, 1.1).normalize();
-    rnd.set(rng() - 0.5, rng() - 0.5, rng() - 0.5).normalize();
-    t.crossVectors(n, rnd).normalize();
-    bt.crossVectors(n, t).normalize();
-    const snowW = snow * smoothstep(0.25, 0.8, dir.y + (rng() - 0.5) * 0.45);
+    const dist = r * (0.42 + 0.3 * rng());
+    const p = new V3(center.x + dir.x * dist, center.y + dir.y * dist * flatten, center.z + dir.z * dist);
+    const size = r * (0.62 + 0.3 * rng()) * cardScale;
+    b.pad = Math.max(b.pad, size * 1.42);
+    const snowW = snow * smoothstep(0.35, 0.8, dir.y + (rng() - 0.5) * 0.3);
+    const ao = aoMin + (1 - aoMin) * (0.45 + 0.55 * (dir.y * 0.5 + 0.5));
+    const rot = rng() * Math.PI * 2, cr = Math.cos(rot), sr = Math.sin(rot);
     const ids = [];
     for (let k = 0; k < 4; k++) {
-      corner.copy(pc).addScaledVector(t, offs[k][0] * size * 0.5).addScaledVector(bt, offs[k][1] * size * 0.5);
-      cn.subVectors(corner, center);
-      cn.y /= flatten;
-      cn.normalize().lerp(dir, 0.35).normalize();
-      const depth = Math.min(1, corner.distanceTo(center) / r);
-      const ao = aoMin + (1 - aoMin) * (0.35 + 0.65 * (cn.y * 0.5 + 0.5)) * (0.7 + 0.3 * depth);
-      ids.push(b.vert(corner, cn, uvs[k], [Math.min(1, ao), snowW]));
+      const ox = offs[k][0] * size, oy = offs[k][1] * size;
+      ids.push(b.vert(p, dir, uvs[k], [Math.min(1, ao), snowW], [1, 1, 1], [ox * cr - oy * sr, ox * sr + oy * cr]));
     }
     b.tri(ids[0], ids[1], ids[2]); b.tri(ids[0], ids[2], ids[3]);
   }
 }
 
-// ------------------------------------------------------------------- берёза
-export function makeBirch(rng, lod) {
-  const height = 8 + rng() * 4;
-  const radial = lod === 0 ? 8 : 5;
-  const segs = lod === 0 ? 7 : 3;
-  const pts = curvePoints(new V3(0, -1.2, 0), new V3((rng() - 0.5) * 0.8, height * 0.9, (rng() - 0.5) * 0.8), segs, 0.7, rng);
-  const radii = pts.map((_, i) => 0.24 * (1 - (i / segs) * 0.7));
-  const parts = [makeTube(pts, radii, radial, { uvV: 0.5 })];
-
-  const crown = new Builder();
-  const blobs = 2 + Math.floor(rng() * 3);
-  const cardsPer = lod === 0 ? 40 : 9;
-  for (let k = 0; k < blobs; k++) {
-    const f = blobs === 1 ? 1 : k / (blobs - 1);
-    const y = height * (0.55 + 0.42 * f);
-    const r = (2.3 + rng() * 0.9) * (1 - 0.3 * f);
-    const cx = (rng() - 0.5) * 1.6, cz = (rng() - 0.5) * 1.6;
-    const center = new V3(pts[segs].x * (y / height) + cx, y, pts[segs].z * (y / height) + cz);
-    addFluffyBlob(crown, center, r, Math.round(cardsPer * (0.7 + r / 3)), rng, { cardScale: lod === 0 ? 0.9 : 1.45, flatten: 0.85 });
-    if (lod === 0) {
-      // ветка от ствола к шару
-      const from = pts[Math.floor(segs * (0.45 + 0.35 * f))].clone();
-      const to = center.clone().lerp(from, 0.25);
-      parts.push(makeTube([from, from.clone().lerp(to, 0.5).add(new V3(0, 0.3, 0)), to], [0.07, 0.05, 0.03], 4));
-    }
+function buildBalls(balls, rng, lod, opts = {}) {
+  const b = new Builder();
+  for (const ball of balls) {
+    const cards = lod === 0 ? Math.round(18 + ball.r * 9) : Math.round(6 + ball.r * 2);
+    addFluffyBall(b, ball.c, ball.r, cards, rng, { ...opts, cardScale: lod === 0 ? 1 : 1.3 });
   }
-  return { trunk: mergeGeometries(parts), crown: crown.build() };
+  return b.build({ corner: true });
 }
 
-// --------------------------------------------------- высокая сосна с кроной-шапкой
-export function makePine(rng, lod) {
-  const height = 15 + rng() * 6;
-  const segs = lod === 0 ? 8 : 3;
-  const lean = 0.03 * height;
-  const top = new V3((rng() - 0.5) * lean * 2, height, (rng() - 0.5) * lean * 2);
-  const pts = curvePoints(new V3(0, -1.2, 0), top, segs, 1.0, rng);
-  const radii = pts.map((_, i) => 0.3 * (1 - (i / segs) * 0.75));
-  const parts = [makeTube(pts, radii, lod === 0 ? 7 : 4, { uvV: 0.5 })];
-  const crown = new Builder();
-  const blobs = 2 + Math.floor(rng() * 3);
-  for (let k = 0; k < blobs; k++) {
-    const f = k / Math.max(1, blobs - 1);
-    const y = height * (0.74 + 0.24 * f);
-    const r = 1.4 + rng() * 1.0;
-    const side = k === 0 ? 0 : 1.6 + rng() * 1.2;
+// ------------------------------------------------------------------- берёза
+// Тонкий белый ствол с чёрными пятнами и 1–3 пушистых шара на верхушке.
+export function makeBirch(rng, lod) {
+  const height = 8.5 + rng() * 4;
+  const radial = lod === 0 ? 7 : 4;
+  const segs = lod === 0 ? 6 : 3;
+  const top = new V3((rng() - 0.5) * 1.2, height, (rng() - 0.5) * 1.2);
+  const pts = curvePoints(new V3(0, -1.2, 0), top, segs, 0.6, rng);
+  const radii = pts.map((_, i) => 0.2 * (1 - (i / segs) * 0.6));
+  const parts = [makeTube(pts, radii, radial, { uvV: 0.35 })];
+  const balls = [];
+  const n = 1 + Math.floor(rng() * 3);
+  const main = 1.9 + rng() * 0.8;
+  balls.push({ c: new V3(top.x, height + main * 0.35, top.z), r: main });
+  for (let k = 1; k < n; k++) {
     const a = rng() * Math.PI * 2;
-    const tp = pts[Math.min(segs, Math.round(segs * (y / height)))];
-    const center = new V3(tp.x + Math.cos(a) * side, y, tp.z + Math.sin(a) * side);
-    addFluffyBlob(crown, center, r, lod === 0 ? Math.round(18 + r * 6) : 6, rng, { cardScale: lod === 0 ? 1 : 1.5, flatten: 0.7 });
-    if (lod === 0 && side > 0) parts.push(makeTube([tp.clone(), center.clone().lerp(tp, 0.2)], [0.08, 0.04], 4));
+    const rr = main * (0.55 + rng() * 0.25);
+    const y = height - main * (0.3 + rng() * 0.9);
+    const c = new V3(top.x * (y / height) + Math.cos(a) * main * 0.9, y, top.z * (y / height) + Math.sin(a) * main * 0.9);
+    balls.push({ c, r: rr });
+    if (lod === 0) {
+      const from = pts[Math.min(segs, Math.round(segs * (y / height)) - 1)].clone();
+      parts.push(makeTube([from, c.clone().lerp(from, 0.35)], [0.07, 0.04], 4));
+    }
   }
-  return { trunk: mergeGeometries(parts), crown: crown.build() };
+  return { trunk: mergeGeometries(parts), crown: buildBalls(balls, rng, lod) };
+}
+
+// --------------------------------------------- высокая сосна с шапками на ветках
+export function makePine(rng, lod) {
+  const height = 14 + rng() * 7;
+  const segs = lod === 0 ? 7 : 3;
+  const lean = 0.06 * height;
+  const top = new V3((rng() - 0.5) * lean * 2, height, (rng() - 0.5) * lean * 2);
+  const pts = curvePoints(new V3(0, -1.2, 0), top, segs, 0.8, rng);
+  const radii = pts.map((_, i) => 0.32 * (1 - (i / segs) * 0.7));
+  const parts = [makeTube(pts, radii, lod === 0 ? 7 : 4, { uvV: 0.5 })];
+  const balls = [{ c: new V3(top.x, height + 0.6, top.z), r: 1.4 + rng() * 0.6 }];
+  const side = 2 + Math.floor(rng() * 3);
+  for (let k = 0; k < side; k++) {
+    const y = height * (0.62 + rng() * 0.3);
+    const a = rng() * Math.PI * 2, L = 1.8 + rng() * 2.2;
+    const tp = pts[Math.min(segs, Math.max(1, Math.round(segs * (y / height))))];
+    const c = new V3(tp.x + Math.cos(a) * L, y + 0.6 + rng() * 0.8, tp.z + Math.sin(a) * L);
+    balls.push({ c, r: 0.9 + rng() * 0.6 });
+    if (lod === 0) parts.push(makeTube([tp.clone(), c.clone().add(new V3(0, -0.4, 0))], [0.09, 0.05], 4));
+  }
+  return { trunk: mergeGeometries(parts), crown: buildBalls(balls, rng, lod, { aoMin: 0.55 }) };
 }
 
 // ------------------------------------------------------------- ель под снегом
 // Вблизи (lod 0) ель собирается из отдельных свисающих лап со снегом сверху.
 export function makeSpruce(rng, lod) {
-  if (lod === 0) return makeSpruceDetailed(rng);
+  if (lod === 0) return makeSpruceSimple(rng, 13, 12);
   return lod === 1 ? makeSpruceSimple(rng, 8, 9) : makeSpruceSimple(rng, 4, 6);
 }
 
@@ -305,10 +313,10 @@ function makeSpruceSimple(rng, tiers, K) {
       const a = rot + (kk / (K * 2)) * Math.PI * 2;
       const spike = kk % 2 === 0;
       const rr = R * (spike ? 0.92 + rng() * 0.22 : 0.62 + rng() * 0.12);
-      const droop = spike ? -th * (0.08 + rng() * 0.12) : th * 0.06;
+      const droop = spike ? -th * (0.18 + rng() * 0.2) : th * 0.02;
       p.set(Math.cos(a) * rr, by + droop, Math.sin(a) * rr);
       n.set(Math.cos(a) * 0.75, 0.9, Math.sin(a) * 0.75).normalize();
-      const snow = spike ? 0.05 + rng() * 0.4 : 0.3 + rng() * 0.35;
+      const snow = spike ? 0.2 + rng() * 0.4 : 0.45 + rng() * 0.35;
       rim.push(b.vert(p.clone(), n.clone(), [0, 0], [spike ? 0.85 : 0.95, snow], spike ? needleDark : needle));
       n.set(Math.cos(a) * 0.5, -1, Math.sin(a) * 0.5).normalize();
       under.push(b.vert(p.clone(), n.clone(), [0, 0], [0.45, 0], needleDark));
@@ -340,24 +348,17 @@ export function makeSnag(rng) {
 
 // ------------------------------------------------------- поваленное бревно, пень
 export function makeLog(rng) {
-  const L = 5 + rng() * 6, r = 0.3 + rng() * 0.2;
+  const L = 5 + rng() * 5, r = 0.45 + rng() * 0.25;
   const pts = [];
   for (let i = 0; i <= 6; i++) pts.push(new V3(-L / 2 + (L * i) / 6, Math.sin(i * 0.9) * 0.08, (rng() - 0.5) * 0.15));
   const radii = pts.map((_, i) => r * (1 - i * 0.04));
-  const parts = [makeTube(pts, radii, 8, { capStart: true, capEnd: true })];
-  const stubs = 1 + Math.floor(rng() * 3);
+  const parts = [makeTube(pts, radii, 9, { capStart: true, capEnd: true, uvV: 0.35 })];
+  const stubs = Math.floor(rng() * 2);
   for (let i = 0; i < stubs; i++) {
     const from = pts[1 + Math.floor(rng() * 5)].clone();
     const a = rng() * Math.PI * 2;
     const to = from.clone().add(new V3((rng() - 0.5) * 0.6, Math.cos(a) * 1.2 + 0.3, Math.sin(a) * 1.2));
     parts.push(makeTube([from, to], [0.09, 0.03], 4));
-  }
-  // корневой выворот на одном конце
-  const rootC = pts[0].clone().add(new V3(-0.1, 0, 0));
-  for (let i = 0; i < 7; i++) {
-    const a = (i / 7) * Math.PI * 2 + rng() * 0.4;
-    const to = rootC.clone().add(new V3(-0.3 - rng() * 0.4, Math.cos(a) * (0.9 + rng() * 0.8), Math.sin(a) * (0.9 + rng() * 0.8)));
-    parts.push(makeTube([rootC, to], [r * 0.45, 0.04], 4));
   }
   return mergeGeometries(parts);
 }
@@ -388,24 +389,31 @@ function cutShape(geo, rng, planes, minD, maxD, wobble = 0.25) {
   return geo;
 }
 
-export function makeRock(rng, detail = 1) {
-  let g = new THREE.IcosahedronGeometry(1, detail);
+export function makeRock(rng) {
+  let g = new THREE.IcosahedronGeometry(1, 0);
   g = mergeVerticesSimple(g);
-  cutShape(g, rng, 7, 0.55, 0.85, 0.3);
-  g.scale(1 + rng() * 0.5, 0.6 + rng() * 0.45, 1 + rng() * 0.4);
-  g.translate(0, 0.15, 0);
+  cutShape(g, rng, 4, 0.45, 0.7, 0.35);
+  g.scale(1 + rng() * 0.6, 0.55 + rng() * 0.4, 0.9 + rng() * 0.5);
+  g.translate(0, 0.2, 0);
   const flat = g.toNonIndexed();
   flat.computeVertexNormals();
   flat.computeBoundingSphere();
   return flat;
 }
 
+// Тёмная плита/клин — как крупные скалы в видео.
 export function makeCliff(rng) {
-  let g = new THREE.IcosahedronGeometry(1, 2);
+  let g = new THREE.BoxGeometry(2, 2, 2, 1, 1, 1);
+  g.deleteAttribute('uv');
   g = mergeVerticesSimple(g);
-  g.scale(1.0, 1.2, 0.8);
-  cutShape(g, rng, 12, 0.45, 0.8, 0.18);
-  g.translate(0, 0.35, 0);
+  const pos = g.attributes.position;
+  for (let i = 0; i < pos.count; i++) {
+    const y = pos.getY(i);
+    const k = y > 0 ? 0.35 + rng() * 0.5 : 1; // верх сужается — получается клин
+    pos.setXYZ(i, pos.getX(i) * (y > 0 ? 0.6 + rng() * 0.5 : 1) + (rng() - 0.5) * 0.3, y, pos.getZ(i) * k);
+  }
+  cutShape(g, rng, 2, 0.75, 0.95, 0.05);
+  g.translate(0, 0.3, 0);
   const flat = g.toNonIndexed();
   flat.computeVertexNormals();
   flat.computeBoundingSphere();
@@ -430,66 +438,41 @@ function mergeVerticesSimple(geo) {
   return g;
 }
 
-// ---------------------------------------------------------- каменная арка
-export function makeArch(rng, { span = 15, height = 22, thick = 2.6 } = {}) {
-  const noise = makeNoise2D(Math.floor(rng() * 1e6));
-  const A = span / 2;
-  const ctrl = [
-    new V3(-A - 2.2, -5, 0), new V3(-A - 0.6, 3, 0), new V3(-A * 0.82, 10, 0), new V3(-A * 0.5, 16.5, 0),
-    new V3(-A * 0.12, height - 0.5, 0), new V3(A * 0.2, height - 0.8, 0), new V3(A * 0.55, 16, 0),
-    new V3(A * 0.86, 9.5, 0), new V3(A + 0.4, 3, 0), new V3(A + 2.4, -5, 0),
-  ];
-  ctrl.forEach((p) => { p.y *= height / 22; });
-  const curve = new THREE.CatmullRomCurve3(ctrl, false, 'catmullrom', 0.5);
-  const pts = curve.getPoints(70);
-  const radii = pts.map((_, i) => {
-    const t = i / (pts.length - 1);
-    const foot = Math.pow(Math.abs(t - 0.5) * 2, 3);
-    return thick * (0.85 + 1.5 * foot) * (0.9 + 0.2 * Math.sin(t * 17.0));
-  });
-  let g = makeTube(pts, radii, 12, { capStart: true, capEnd: true, ellipse: [1.7, 1.0] });
-  const pos = g.attributes.position, nor = g.attributes.normal;
-  const v = new V3(), nn = new V3();
-  for (let i = 0; i < pos.count; i++) {
-    v.fromBufferAttribute(pos, i);
-    nn.fromBufferAttribute(nor, i);
-    const d = noise(v.x * 0.22 + v.z * 0.1, v.y * 0.22) * 0.9 + noise(v.x * 0.7, v.y * 0.7 + v.z * 0.5) * 0.35;
-    v.addScaledVector(nn, d);
-    // срезы граней — немного «колотого» камня
-    const q = Math.round(v.z / 1.3) * 1.3;
-    v.z = v.z * 0.75 + q * 0.25;
-    pos.setXYZ(i, v.x, v.y, v.z);
-  }
+// ---------------------------------------------------------- каменные ворота
+// Высокие ворота из тёмного камня с овальным проёмом, слегка перекошенные.
+export function makeArch(rng, { width = 7, height = 12, depth = 1.6 } = {}) {
+  const W = width / 2;
+  const lean = (rng() - 0.5) * 1.2;
+  const shape = new THREE.Shape();
+  shape.moveTo(-W - 0.8, -3);
+  shape.lineTo(W + 0.6, -3);
+  shape.lineTo(W + 0.1, height * 0.45);
+  shape.lineTo(W * 0.55 + lean, height * 0.9);
+  shape.lineTo(W * 0.15 + lean, height);
+  shape.lineTo(-W * 0.35 + lean, height * 0.97);
+  shape.lineTo(-W * 0.75 + lean * 0.5, height * 0.7);
+  shape.lineTo(-W - 0.3, height * 0.35);
+  shape.closePath();
+  const hole = new THREE.Path();
+  const hx = lean * 0.35, hy = height * 0.42, rx = W * 0.5, ry = height * 0.3;
+  hole.absellipse(hx, hy, rx, ry, 0, Math.PI * 2, false, 0);
+  shape.holes.push(hole);
+  let g = new THREE.ExtrudeGeometry(shape, { depth, bevelEnabled: true, bevelThickness: 0.35, bevelSize: 0.3, bevelSegments: 1, curveSegments: 14 });
+  g.translate(0, 0, -depth / 2);
   g.deleteAttribute('uv');
-  g = g.toNonIndexed();
+  if (g.index) g = g.toNonIndexed();
   g.computeVertexNormals();
   g.computeBoundingSphere();
   return g;
 }
 
-// ----------------------------------------------------------- облака
-export function makeCloud(rng) {
-  const b = new Builder();
-  const puffs = 6 + Math.floor(rng() * 6);
-  const W = 160 + rng() * 160;
-  for (let i = 0; i < puffs; i++) {
-    const f = puffs === 1 ? 0.5 : i / (puffs - 1);
-    const mid = 1 - Math.abs(f - 0.5) * 1.4;
-    const r = 28 + rng() * 34 * mid;
-    const center = new V3((f - 0.5) * W + (rng() - 0.5) * 30, r * 0.3 + rng() * 10 * mid, (rng() - 0.5) * W * 0.45);
-    addFluffyBlob(b, center, r, 30, rng, { snow: 0, cardScale: 1.3, flatten: 0.62, aoMin: 0.7 });
-  }
-  return b.build();
-}
-
 // ------------------------------------------------------------ куст
 export function makeBush(rng) {
-  const b = new Builder();
-  const blobs = 1 + Math.floor(rng() * 3);
-  for (let i = 0; i < blobs; i++) {
-    const r = 0.7 + rng() * 0.7;
-    const center = new V3((rng() - 0.5) * 1.6, r * 0.55, (rng() - 0.5) * 1.6);
-    addFluffyBlob(b, center, r, 14, rng, { flatten: 0.8 });
+  const balls = [];
+  const n = 1 + Math.floor(rng() * 2);
+  for (let i = 0; i < n; i++) {
+    const r = 0.8 + rng() * 0.6;
+    balls.push({ c: new V3((rng() - 0.5) * 1.4, r * 0.6, (rng() - 0.5) * 1.4), r });
   }
-  return b.build();
+  return buildBalls(balls, rng, 0);
 }
