@@ -43,6 +43,14 @@ export class Sky {
           col = mix(col, uHorizon * 1.06, exp(-abs(y) * 18.0) * 0.5);
           float s = max(dot(d, normalize(uSunDir)), 0.0);
           col += uSunColor * (pow(s, 900.0) * 6.0 + pow(s, 60.0) * 0.5 * uSunGlow + pow(s, 6.0) * 0.35 * uSunGlow);
+          // soft drifting clouds low over the ranges
+          if (y > 0.0) {
+            vec2 cp = d.xz / (y + 0.12) * 1.6 + vec2(uTime * 0.01, 0.0);
+            float cl = vn(cp) * 0.55 + vn(cp * 2.3 + 4.0) * 0.3 + vn(cp * 5.1 - 2.0) * 0.15;
+            float cover = smoothstep(0.52, 0.8, cl) * smoothstep(0.0, 0.06, y) * (1.0 - smoothstep(0.25, 0.5, y));
+            vec3 cc = mix(uHorizon * 1.08, uSunColor, 0.25 + 0.5 * pow(s, 4.0)) + uSunColor * pow(s, 20.0) * 0.6 * uSunGlow;
+            col = mix(col, cc, cover * 0.75 * (1.0 - uStars * 0.6));
+          }
           if (uStars > 0.0 && y > 0.0) {
             vec3 g = floor(d * 380.0);
             float h = hash(g);

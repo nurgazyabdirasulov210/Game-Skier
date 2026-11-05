@@ -56,7 +56,10 @@ export function makeSnowMaterial(trail) {
       .replace('#include <color_fragment>', `#include <color_fragment>
         vec2 tuv = vTW / uTrailSize;
         vec4 tS = texture2D(uTrail, tuv) * vTMask;
-        diffuseColor.rgb *= mix(vec3(1.0), uTrenchTint, smoothstep(0.05, 0.9, tS.r));`)
+        diffuseColor.rgb *= mix(vec3(1.0), uTrenchTint, smoothstep(0.05, 0.9, tS.r));
+        // wind-packed patches and drifts: a faint variation in the snow
+        float pv = vnoise(vTW * 0.045) * 0.6 + vnoise(vTW * 0.21) * 0.4;
+        diffuseColor.rgb *= mix(vec3(0.95, 0.965, 1.0), vec3(1.0), smoothstep(0.25, 0.75, pv));`)
       .replace('#include <normal_fragment_maps>', `#include <normal_fragment_maps>
         {
           float e = 1.0 / ${TRAIL_RES.toFixed(1)};

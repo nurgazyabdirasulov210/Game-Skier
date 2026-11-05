@@ -78,84 +78,121 @@ export class Rider {
     const mitts = this._mat('mitts', '#15161f');
     const pack = this._mat('pack', '#2b2f52');
     const dark = this._mat('dark', '#14151f');
-    const goggle = new THREE.MeshStandardMaterial({ color: '#ffb02e', roughness: 0.2, metalness: 0.4, emissive: '#5a2a00' });
+    const grey = this._mat('grey', '#8a90a8');
+    grey.metalness = 0.5; grey.roughness = 0.4;
+    const white = this._mat('white', '#eef0f6');
+    const base = this._mat('base', '#101118');
+    const goggle = new THREE.MeshStandardMaterial({ color: '#ffb02e', roughness: 0.12, metalness: 0.7, emissive: '#4a2200' });
+    this.mats.goggle = goggle;
     const pole = this._mat('pole', '#d8dbe6');
+    pole.metalness = 0.6; pole.roughness = 0.35;
+    const add = (parent, geo, mat, x = 0, y = 0, z = 0, rx = 0, ry = 0, rz = 0, sx = 1, sy = 1, sz = 1) => {
+      const m = new THREE.Mesh(geo, mat);
+      m.position.set(x, y, z); m.rotation.set(rx, ry, rz); m.scale.set(sx, sy, sz);
+      m.castShadow = true;
+      parent.add(m);
+      return m;
+    };
 
-    // feet group carries boots and skis (lifted when tucking in the air)
+    // ---- skis: sidecut, rocker tips, topsheet stripe, bindings ----
     this.feet = new THREE.Group();
     B.add(this.feet);
-    const skiGeo = new THREE.BoxGeometry(0.095, 0.022, 1.72, 1, 1, 14);
-    const sp = skiGeo.attributes.position;
-    for (let i = 0; i < sp.count; i++) {
-      const z = sp.getZ(i);
-      if (z > 0.62) { const t = (z - 0.62) / 0.24; sp.setY(i, sp.getY(i) + t * t * 0.1); }
-      if (z < -0.78) { const t = (-z - 0.78) / 0.08; sp.setY(i, sp.getY(i) + t * t * 0.02); }
-    }
-    skiGeo.computeVertexNormals();
+    const skiShape = (w, h, y0) => {
+      const g = new THREE.BoxGeometry(1, h, 1.74, 1, 1, 28);
+      const p = g.attributes.position;
+      for (let i = 0; i < p.count; i++) {
+        const z = p.getZ(i);
+        const t = z / 0.87;
+        // waist narrower than tip and tail
+        const width = w * (0.82 + 0.22 * t * t) * (z > 0.8 ? 1 - (z - 0.8) * 4 : 1);
+        p.setX(i, p.getX(i) * width);
+        let y = p.getY(i) + y0;
+        if (z > 0.55) { const k = (z - 0.55) / 0.32; y += k * k * 0.13; }
+        if (z < -0.7) { const k = (-z - 0.7) / 0.17; y += k * k * 0.05; }
+        p.setY(i, y);
+      }
+      g.computeVertexNormals();
+      return g;
+    };
+    const skiGeo = skiShape(0.11, 0.02, 0);
+    const baseGeo = skiShape(0.112, 0.006, -0.012);
+    const stripeGeo = skiShape(0.03, 0.004, 0.012);
     this.skis = [];
     for (const sx of [-0.11, 0.11]) {
-      const ski = new THREE.Mesh(skiGeo, skiM);
-      ski.position.set(sx, 0.012, 0.06);
-      ski.castShadow = true;
+      const ski = new THREE.Group();
+      ski.position.set(sx, 0.014, 0.06);
       this.feet.add(ski);
+      add(ski, skiGeo, skiM);
+      add(ski, baseGeo, base);
+      add(ski, stripeGeo, white);
+      // bindings
+      add(ski, new THREE.BoxGeometry(0.085, 0.045, 0.1), grey, 0, 0.032, 0.17);
+      add(ski, new THREE.BoxGeometry(0.085, 0.06, 0.12), grey, 0, 0.04, -0.17);
+      add(ski, new THREE.BoxGeometry(0.02, 0.02, 0.09), dark, 0, 0.075, -0.2, 0.5);
+      add(ski, new THREE.BoxGeometry(0.1, 0.012, 0.42), dark, 0, 0.016, 0);
       this.skis.push(ski);
-      const boot = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.16, 0.3), dark);
-      boot.position.set(sx, 0.1, 0.02);
-      boot.castShadow = true;
-      this.feet.add(boot);
+      // boot: shell, cuff, buckles, sole
+      add(this.feet, new THREE.BoxGeometry(0.115, 0.03, 0.31), dark, sx, 0.045, 0.02);
+      const shell = add(this.feet, new THREE.CapsuleGeometry(0.06, 0.16, 4, 10), white, sx, 0.11, 0.04, Math.PI / 2, 0, 0, 0.95, 1, 0.8);
+      shell.material = this.mats.helmet;
+      add(this.feet, new THREE.CylinderGeometry(0.068, 0.072, 0.16, 12), dark, sx, 0.2, -0.01);
+      for (let b = 0; b < 3; b++) add(this.feet, new THREE.BoxGeometry(0.012, 0.018, 0.05), grey, sx + (sx > 0 ? 0.07 : -0.07), 0.12 + b * 0.05, 0.05 - b * 0.03);
     }
 
-    // hips
+    // ---- hips, belt ----
     this.hips = new THREE.Group();
     B.add(this.hips);
-    const pelvis = new THREE.Mesh(new THREE.SphereGeometry(0.17, 12, 10), pants);
-    pelvis.scale.set(1.1, 0.8, 0.9);
-    pelvis.castShadow = true;
-    this.hips.add(pelvis);
+    add(this.hips, new THREE.SphereGeometry(0.17, 16, 12), pants, 0, 0, 0, 0, 0, 0, 1.12, 0.85, 0.95);
+    add(this.hips, new THREE.TorusGeometry(0.175, 0.022, 6, 22), dark, 0, 0.09, 0, Math.PI / 2, 0, 0, 1.08, 0.92, 1);
+    add(this.hips, new THREE.BoxGeometry(0.06, 0.04, 0.02), grey, 0, 0.09, 0.165);
 
-    // torso: puffy jacket
+    // ---- torso: puffy quilted jacket ----
     this.torso = new THREE.Group();
     this.hips.add(this.torso);
-    const chest = new THREE.Mesh(new THREE.CapsuleGeometry(0.2, 0.26, 6, 14), jacket);
-    chest.position.y = 0.27;
-    chest.scale.set(1.12, 1, 0.92);
-    chest.castShadow = true;
-    this.torso.add(chest);
-    for (let i = 0; i < 3; i++) {   // quilted bands
-      const band = new THREE.Mesh(new THREE.TorusGeometry(0.205, 0.028, 6, 18), i === 1 ? jacket2 : jacket);
-      band.rotation.x = Math.PI / 2;
-      band.position.y = 0.13 + i * 0.13;
-      band.scale.set(1.12, 0.92, 1);
-      this.torso.add(band);
+    add(this.torso, new THREE.CapsuleGeometry(0.2, 0.26, 8, 18), jacket, 0, 0.27, 0, 0, 0, 0, 1.12, 1, 0.92);
+    // hem and quilt baffles
+    add(this.torso, new THREE.TorusGeometry(0.21, 0.035, 8, 22), jacket2, 0, 0.06, 0, Math.PI / 2, 0, 0, 1.12, 0.92, 1);
+    for (let i = 0; i < 4; i++) {
+      add(this.torso, new THREE.TorusGeometry(0.207 - Math.abs(i - 1.5) * 0.004, 0.024, 6, 22), jacket, 0, 0.14 + i * 0.1, 0, Math.PI / 2, 0, 0, 1.13, 0.93, 1);
     }
-    const collar = new THREE.Mesh(new THREE.TorusGeometry(0.11, 0.05, 8, 16), jacket2);
-    collar.rotation.x = Math.PI / 2;
-    collar.position.y = 0.53;
-    this.torso.add(collar);
-    const bag = new THREE.Mesh(new THREE.BoxGeometry(0.3, 0.38, 0.14), pack);
-    bag.position.set(0, 0.3, -0.22);
-    bag.castShadow = true;
-    this.torso.add(bag);
+    // shoulder yoke
+    add(this.torso, new THREE.SphereGeometry(0.21, 16, 10, 0, Math.PI * 2, 0, Math.PI / 2.6), jacket2, 0, 0.41, 0, 0, 0, 0, 1.15, 0.7, 0.95);
+    // zip, pocket, logo patch
+    add(this.torso, new THREE.BoxGeometry(0.014, 0.42, 0.012), dark, 0, 0.3, 0.188);
+    add(this.torso, new THREE.BoxGeometry(0.008, 0.03, 0.02), grey, 0, 0.47, 0.196);
+    add(this.torso, new THREE.BoxGeometry(0.1, 0.08, 0.012), jacket2, 0.1, 0.36, 0.18, 0, 0.35);
+    add(this.torso, new THREE.BoxGeometry(0.08, 0.004, 0.014), dark, 0.1, 0.395, 0.186, 0, 0.35);
+    add(this.torso, new THREE.CircleGeometry(0.022, 10), white, -0.11, 0.37, 0.188, 0, -0.4);
+    // collar and hood bunched behind the neck
+    add(this.torso, new THREE.CylinderGeometry(0.1, 0.13, 0.1, 16, 1, true), jacket2, 0, 0.56, 0);
+    add(this.torso, new THREE.TorusGeometry(0.11, 0.055, 8, 16, Math.PI), jacket, 0, 0.56, -0.03, Math.PI / 2 + 0.3, 0, Math.PI);
+    // backpack with straps, side pocket and rolled top
+    const bag = add(this.torso, new THREE.CapsuleGeometry(0.13, 0.2, 4, 12), pack, 0, 0.3, -0.21, 0, 0, 0, 1.15, 1, 0.55);
     this.bag = bag;
+    add(this.torso, new THREE.CylinderGeometry(0.06, 0.06, 0.3, 12), pack, 0, 0.5, -0.22, 0, 0, Math.PI / 2);
+    add(this.torso, new THREE.BoxGeometry(0.2, 0.012, 0.03), dark, 0, 0.27, -0.29);
+    add(this.torso, new THREE.BoxGeometry(0.2, 0.012, 0.03), dark, 0, 0.36, -0.29);
+    add(this.torso, new THREE.BoxGeometry(0.05, 0.12, 0.06), dark, 0.15, 0.24, -0.22);
+    for (const s of [-1, 1]) {
+      add(this.torso, new THREE.TorusGeometry(0.17, 0.016, 5, 14, Math.PI * 0.9), dark, s * 0.11, 0.33, -0.01, 0, Math.PI / 2, Math.PI / 2 + 0.25, 1, 1.25, 1.2);
+    }
+    add(this.torso, new THREE.BoxGeometry(0.2, 0.018, 0.012), dark, 0, 0.3, 0.19);
 
-    // head
+    // ---- head: helmet, vents, goggles, gaiter ----
     this.head = new THREE.Group();
     this.head.position.y = 0.6;
     this.torso.add(this.head);
-    const skull = new THREE.Mesh(new THREE.SphereGeometry(0.135, 16, 12), helmet);
-    skull.position.y = 0.1;
-    skull.scale.set(1, 1.05, 1.08);
-    skull.castShadow = true;
-    this.head.add(skull);
-    const face = new THREE.Mesh(new THREE.SphereGeometry(0.12, 12, 10), dark);
-    face.position.set(0, 0.07, 0.035);
-    this.head.add(face);
-    const gog = new THREE.Mesh(new THREE.CapsuleGeometry(0.045, 0.12, 4, 10), goggle);
-    gog.rotation.z = Math.PI / 2;
-    gog.position.set(0, 0.11, 0.12);
-    this.head.add(gog);
+    add(this.head, new THREE.CylinderGeometry(0.075, 0.09, 0.09, 14), jacket2, 0, 0.0, 0.01);
+    add(this.head, new THREE.SphereGeometry(0.115, 14, 12), dark, 0, 0.08, 0.04);
+    add(this.head, new THREE.SphereGeometry(0.14, 20, 14, 0, Math.PI * 2, 0, Math.PI * 0.62), helmet, 0, 0.09, -0.005, -0.15, 0, 0, 1, 1.08, 1.12);
+    for (let v = 0; v < 3; v++) add(this.head, new THREE.BoxGeometry(0.018, 0.012, 0.09), dark, (v - 1) * 0.045, 0.235, -0.01, -0.15);
+    add(this.head, new THREE.BoxGeometry(0.2, 0.012, 0.05), helmet, 0, 0.17, 0.15, 0.25);
+    add(this.head, new THREE.TorusGeometry(0.145, 0.014, 6, 24), dark, 0, 0.115, 0, Math.PI / 2 + 0.12, 0, 0, 1, 1.15, 1);
+    add(this.head, new THREE.TorusGeometry(0.05, 0.012, 6, 14), dark, -0.05, 0.115, 0.135, 0, 0, 0, 1.2, 0.85, 1);
+    add(this.head, new THREE.TorusGeometry(0.05, 0.012, 6, 14), dark, 0.05, 0.115, 0.135, 0, 0, 0, 1.2, 0.85, 1);
+    add(this.head, new THREE.CapsuleGeometry(0.045, 0.1, 4, 12), goggle, 0, 0.115, 0.128, 0, 0, Math.PI / 2, 1, 1, 0.55);
 
-    // arms
+    // ---- arms: puffy sleeves, cuffs, mitts with thumbs ----
     this.arms = [];
     for (const s of [-1, 1]) {
       const shoulder = new THREE.Group();
@@ -163,26 +200,30 @@ export class Rider {
       this.torso.add(shoulder);
       const upper = new THREE.Group();
       shoulder.add(upper);
-      upper.add(capsule(0.075, 0.24, jacket));
+      upper.add(capsule(0.08, 0.22, jacket));
+      add(upper, new THREE.TorusGeometry(0.078, 0.016, 6, 14), jacket2, 0, -0.14, 0, Math.PI / 2);
       const lower = new THREE.Group();
       lower.position.y = -0.3;
       upper.add(lower);
-      lower.add(capsule(0.065, 0.22, jacket));
-      const mitt = new THREE.Mesh(new THREE.SphereGeometry(0.07, 10, 8), mitts);
+      lower.add(capsule(0.07, 0.2, jacket));
+      add(lower, new THREE.CylinderGeometry(0.072, 0.064, 0.06, 12), jacket2, 0, -0.25, 0);
+      const mitt = new THREE.Group();
       mitt.position.y = -0.31;
-      mitt.scale.set(0.9, 1.2, 0.9);
       lower.add(mitt);
-      const poleMesh = new THREE.Mesh(new THREE.CylinderGeometry(0.011, 0.011, 1.15, 5), pole);
-      poleMesh.geometry.translate(0, -0.55, 0);
-      const basket = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.05, 0.01, 8), dark);
-      basket.position.y = -1.0;
-      poleMesh.add(basket);
-      poleMesh.castShadow = true;
+      add(mitt, new THREE.SphereGeometry(0.068, 12, 10), mitts, 0, 0, 0, 0, 0, 0, 0.85, 1.25, 0.95);
+      add(mitt, new THREE.CapsuleGeometry(0.022, 0.05, 4, 8), mitts, -s * 0.045, 0.01, 0.04, 0.6, 0, s * 0.5);
+      add(mitt, new THREE.CylinderGeometry(0.07, 0.07, 0.04, 12), mitts, 0, 0.07, 0);
+      const poleMesh = new THREE.Group();
+      add(poleMesh, new THREE.CylinderGeometry(0.01, 0.008, 1.12, 6), pole, 0, -0.56, 0);
+      add(poleMesh, new THREE.CylinderGeometry(0.02, 0.017, 0.14, 8), dark, 0, 0.0, 0);
+      add(poleMesh, new THREE.TorusGeometry(0.035, 0.005, 4, 10), dark, 0, 0.08, 0, 0, Math.PI / 2);
+      add(poleMesh, new THREE.CylinderGeometry(0.055, 0.055, 0.008, 12), dark, 0, -1.0, 0);
+      add(poleMesh, new THREE.ConeGeometry(0.008, 0.06, 5), grey, 0, -1.14, 0, Math.PI);
       B.add(poleMesh);
       this.arms.push({ s, shoulder, upper, lower, mitt, pole: poleMesh });
     }
 
-    // legs
+    // ---- legs: baggy pants, knee patches, cuffs over boots ----
     this.legs = [];
     for (const s of [-1, 1]) {
       const hip = new THREE.Group();
@@ -190,35 +231,74 @@ export class Rider {
       this.hips.add(hip);
       const upper = new THREE.Group();
       hip.add(upper);
-      upper.add(capsule(0.085, 0.36, pants));
+      upper.add(capsule(0.092, 0.34, pants));
+      add(upper, new THREE.BoxGeometry(0.07, 0.1, 0.03), pants, s * 0.085, -0.2, 0.01, 0, 0, 0, 1, 1, 1);
+      add(upper, new THREE.BoxGeometry(0.004, 0.08, 0.04), dark, s * 0.1, -0.2, 0.01);
       const lower = new THREE.Group();
       lower.position.y = -0.45;
       upper.add(lower);
-      lower.add(capsule(0.075, 0.36, pants));
+      lower.add(capsule(0.082, 0.34, pants));
+      add(lower, new THREE.SphereGeometry(0.06, 10, 8), jacket2, 0, -0.01, 0.06, 0, 0, 0, 1, 1, 0.45);
+      add(lower, new THREE.CylinderGeometry(0.088, 0.105, 0.14, 14), pants, 0, -0.38, 0);
       this.legs.push({ s, hip, upper, lower });
     }
 
-    // paraglider wing
+    // ---- paraglider: curved canopy with airfoil cells, cascade lines, risers ----
     this.wing = new THREE.Group();
-    const wingMat = this._mat('wing', '#1f5f63');
-    const cells = 11;
-    for (let i = 0; i < cells; i++) {
-      const a = (i / (cells - 1) - 0.5) * 2.1;
-      const cell = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.22, 2.1), wingMat);
-      cell.position.set(Math.sin(a) * 4.5, Math.cos(a) * 4.5 - 4.5 + 6.2, 0.3);
-      cell.rotation.z = -a;
-      cell.castShadow = true;
-      this.wing.add(cell);
+    const wingMat = new THREE.MeshStandardMaterial({ color: 0xffffff, vertexColors: true, roughness: 0.6, side: THREE.DoubleSide });
+    this.mats.wing = wingMat;
+    const SPAN = 64, CH = 10, R = 4.6, ARC = 2.2;
+    const wpos = [], widx = [];
+    this.wingCells = [];
+    // upper and lower skin
+    for (const skin of [1, -1]) {
+      const off = wpos.length / 3;
+      for (let i = 0; i <= SPAN; i++) {
+        const u = i / SPAN;
+        const a = (u - 0.5) * ARC;
+        const chordK = Math.sqrt(1 - Math.pow((u - 0.5) * 2, 2) * 0.75);
+        const cellBulge = Math.abs(Math.sin(u * Math.PI * 16)) * 0.035;
+        for (let j = 0; j <= CH; j++) {
+          const v = j / CH;
+          const chord = 2.5 * chordK;
+          const z = 1.1 * chordK - v * chord + 0.3;
+          const thick = (skin > 0 ? 0.13 + cellBulge : -0.05) * Math.sin(Math.PI * Math.pow(v, 0.7)) * chordK;
+          const r = R + thick;
+          wpos.push(Math.sin(a) * r, Math.cos(a) * r - R + 6.3 - v * 0.15, z);
+          this.wingCells.push(Math.floor(u * 16) % 2, u, v);
+        }
+      }
+      for (let i = 0; i < SPAN; i++) for (let j = 0; j < CH; j++) {
+        const a = off + i * (CH + 1) + j, b = a + CH + 1;
+        widx.push(a, b, a + 1, b, b + 1, a + 1);
+      }
     }
+    const wg = new THREE.BufferGeometry();
+    wg.setAttribute('position', new THREE.Float32BufferAttribute(wpos, 3));
+    wg.setAttribute('color', new THREE.Float32BufferAttribute(new Float32Array(wpos.length), 3));
+    wg.setIndex(widx);
+    wg.computeVertexNormals();
+    this.wingGeo = wg;
+    add(this.wing, wg, wingMat);
+    // lines: canopy -> cascades -> risers at the shoulders
     const lines = [];
-    for (let i = 0; i < cells; i += 2) {
-      const a = (i / (cells - 1) - 0.5) * 2.1;
-      const tip = [Math.sin(a) * 4.4, Math.cos(a) * 4.4 - 4.5 + 6.1, 0.3];
-      for (const s of [-1, 1]) lines.push(...tip, s * 0.22, 1.25, 0);
+    const riser = (s) => [s * 0.22, 1.3, 0.02];
+    for (const s of [-1, 1]) {
+      for (let k = 0; k < 4; k++) {
+        const mid = [s * (0.6 + k * 0.7), 3.6 + k * 0.1, 0.4 - k * 0.15];
+        lines.push(...riser(s), ...mid);
+        for (let m = 0; m < 3; m++) {
+          const u = 0.5 + s * (0.06 + (k * 3 + m) * 0.035);
+          const a = (u - 0.5) * ARC;
+          const zz = 0.7 - m * 0.6;
+          lines.push(...mid, Math.sin(a) * (R - 0.05), Math.cos(a) * (R - 0.05) - R + 6.25, zz);
+        }
+      }
     }
     const lg = new THREE.BufferGeometry();
     lg.setAttribute('position', new THREE.Float32BufferAttribute(lines, 3));
-    this.wing.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: '#e8e8f0', transparent: true, opacity: 0.6 })));
+    this.wing.add(new THREE.LineSegments(lg, new THREE.LineBasicMaterial({ color: '#e8e8f0', transparent: true, opacity: 0.55 })));
+    for (const s of [-1, 1]) add(this.wing, new THREE.BoxGeometry(0.03, 0.4, 0.02), dark, s * 0.22, 1.12, 0.02);
     this.wing.visible = false;
     this.wing.scale.setScalar(0.01);
     this.root.add(this.wing);
@@ -228,7 +308,18 @@ export class Rider {
 
   setOutfit(o) {
     for (const k of ['jacket', 'jacket2', 'pants', 'helmet', 'skis', 'mitts', 'pack']) this.mats[k].color.set(o[k]);
-    this.mats.wing.color.set(o.jacket2).lerp(new THREE.Color('#1f5f63'), 0.5);
+    // canopy: two-tone cells with a light leading edge band
+    const c1 = new THREE.Color(o.jacket), c2 = new THREE.Color(o.jacket2), lite = new THREE.Color('#f2f2f6');
+    const col = this.wingGeo.attributes.color;
+    const tmp = new THREE.Color();
+    for (let i = 0; i < col.count; i++) {
+      const cell = this.wingCells[i * 3], u = this.wingCells[i * 3 + 1], v = this.wingCells[i * 3 + 2];
+      tmp.copy(cell ? c1 : c2);
+      if (v < 0.12) tmp.lerp(lite, 0.6);
+      if (Math.abs(u - 0.5) > 0.44) tmp.copy(c2).multiplyScalar(0.7);
+      col.setXYZ(i, tmp.r, tmp.g, tmp.b);
+    }
+    col.needsUpdate = true;
   }
 
   setFirstPerson(fp) {

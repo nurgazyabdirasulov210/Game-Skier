@@ -144,9 +144,9 @@ function spruceGeo(seed) {
     tri(b0, t0, b1, T, T, T); tri(b1, t0, t1, T, T, T);
   }
   // drooping tiers, unit height tree (scaled per instance)
-  const tiers = 7 + Math.floor(r() * 3);
+  const tiers = 10 + Math.floor(r() * 4);
   const base = 0.12 + r() * 0.06;
-  const RS = 13;
+  const RS = 18;
   for (let k = 0; k < tiers; k++) {
     const f = k / tiers;
     const y0 = base + f * (0.95 - base) * 0.98;
@@ -156,8 +156,8 @@ function spruceGeo(seed) {
     const ring = [];
     for (let i = 0; i < RS; i++) {
       const a = (i / RS) * Math.PI * 2 + r() * 0.3;
-      const rr = rad * (0.7 + r() * 0.45);
-      ring.push([Math.cos(a) * rr, y0 - rr * (0.25 + r() * 0.25), Math.sin(a) * rr, r()]);
+      const rr = rad * ((i & 1 ? 0.62 : 0.95) + r() * 0.3);
+      ring.push([Math.cos(a) * rr, y0 - rr * (0.3 + r() * 0.35), Math.sin(a) * rr, r()]);
     }
     for (let i = 0; i < RS; i++) {
       const a = ring[i], b = ring[(i + 1) % RS];
@@ -225,6 +225,48 @@ function slabGeo(seed) {
   return setMix(g, (v, n) => [smoothstep(0.5, 0.8, n.y) + (v.y > 0.97 ? 0.6 : 0), 0, 0.55 + 0.45 * Math.abs(n.x)]);
 }
 
+function branchGeo() {
+  const g = new THREE.CylinderGeometry(0.35, 1, 1, 5, 1, true);
+  g.translate(0, 0.5, 0);
+  return setMix(g, () => [0, 0, 0.8]);
+}
+
+// a clump of bare twigs poking out of the snow
+function shrubGeo(seed) {
+  const r = mulberry32(seed);
+  const parts = [];
+  for (let i = 0; i < 9; i++) {
+    const h = 0.5 + r() * 0.9;
+    const c = new THREE.ConeGeometry(0.025, h, 4, 1);
+    c.translate(0, h / 2, 0);
+    c.rotateZ((r() - 0.5) * 1.1);
+    c.rotateY(r() * 6.3);
+    parts.push(c.toNonIndexed());
+  }
+  let n = 0;
+  for (const p of parts) n += p.attributes.position.count;
+  const pos = new Float32Array(n * 3);
+  let o = 0;
+  for (const p of parts) { pos.set(p.attributes.position.array, o); o += p.attributes.position.array.length; }
+  const g = new THREE.BufferGeometry();
+  g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+  g.computeVertexNormals();
+  return setMix(g, (v) => [v.y > 0.9 ? 0.6 : 0, 1, 0.7]);
+}
+
+// soft snow pillow / mound
+function pillowGeo(seed) {
+  const g = new THREE.SphereGeometry(1, 20, 10, 0, Math.PI * 2, 0, Math.PI / 2);
+  const p = g.attributes.position;
+  for (let i = 0; i < p.count; i++) {
+    const x = p.getX(i), y = p.getY(i), z = p.getZ(i);
+    const k = 1 + fn(x * 1.3 + seed, z * 1.3) * 0.18;
+    p.setXYZ(i, x * k, y * k * 0.55 - 0.08, z * k);
+  }
+  g.computeVertexNormals();
+  return setMix(g, () => [1, 0, 1]);
+}
+
 // ---------- manager ----------
 export class Flora {
   constructor(scene) {
@@ -237,6 +279,7 @@ export class Flora {
       spruce: makeMixMaterial({ rim: 0.25 }),
       rock: makeMixMaterial({ flat: true }),
       log: makeMixMaterial({ flat: true }),
+      pillow: makeMixMaterial(),
     };
     this.geo = {
       furNear: furBall(3, 11),
@@ -246,6 +289,9 @@ export class Flora {
       rock: [rockGeo(1, 'big'), rockGeo(2, 'big'), rockGeo(3, 'small'), rockGeo(4, 'shard')],
       log: logGeo(),
       slab: slabGeo(9),
+      branch: branchGeo(),
+      shrub: [shrubGeo(5), shrubGeo(6)],
+      pillow: [pillowGeo(1), pillowGeo(2)],
     };
     this.palette = [new THREE.Color('#ff9a52')];
   }
@@ -267,6 +313,8 @@ export class Flora {
     M.log.color.copy(m.rock);
     M.log.userData.uniforms.uTrunk.value.copy(m.rock).lerp(new THREE.Color('#6a5a7a'), 0.35);
     M.log.userData.uniforms.uSnow.value.copy(m.snow);
+    M.pillow.color.copy(m.snow);
+    M.pillow.userData.uniforms.uSnow.value.copy(m.snow);
     this.sunViewRefs = Object.values(M).map((x) => x.userData.uniforms.uSunView.value);
     for (const s of this.sectors.values()) this._recolor(s);
   }
@@ -293,6 +341,7 @@ export class Flora {
     const L = {
       trunks: [], crowns: [], crownPal: [], crownShade: [],
       spruce: [[], [], []], rocks: [[], [], [], []], logs: [], slabs: [],
+      branches: [], shrubs: [[], []], pillows: [[], []],
       obstacles: [], gates: [],
     };
     const m4 = new THREE.Matrix4(), q = new THREE.Quaternion(), e = new THREE.Euler(), s = new THREE.Vector3(), p = new THREE.Vector3();
@@ -333,14 +382,24 @@ export class Flora {
             L.trunks.push(m4.clone());
             const up = new THREE.Vector3(0, 1, 0).applyQuaternion(q);
             const top = new THREE.Vector3(x, y - 0.4, z).addScaledVector(up, hgt);
-            const nb = 2 + Math.floor(rng() * 4);
-            const big = 1.3 + rng() * 1.1;
+            const nb = 3 + Math.floor(rng() * 5);
+            const big = 1.2 + rng() * 1.1;
             const pal = Math.floor(rng() * 8);
+            const base = new THREE.Vector3(x, y - 0.4, z);
             for (let b = 0; b < nb; b++) {
-              const rr = b === 0 ? big : big * (0.55 + rng() * 0.35);
+              const rr = b === 0 ? big : big * (0.45 + rng() * 0.4);
               const a = rng() * Math.PI * 2;
-              const off = b === 0 ? 0 : big * (0.55 + rng() * 0.5);
-              const c = top.clone().add(new THREE.Vector3(Math.cos(a) * off, b === 0 ? 0 : -rng() * big * 1.4, Math.sin(a) * off));
+              const off = b === 0 ? 0 : big * (0.6 + rng() * 0.6);
+              const c = top.clone().add(new THREE.Vector3(Math.cos(a) * off, b === 0 ? 0 : -rng() * big * 1.6, Math.sin(a) * off));
+              if (b > 0) {
+                // branch from the trunk out to this puff
+                const from = base.clone().addScaledVector(up, hgt * (0.6 + rng() * 0.25));
+                const dir = c.clone().sub(from);
+                const len = dir.length();
+                const bq = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0, 1, 0), dir.normalize());
+                m4.compose(from, bq, s.set(tr * 0.35, len * 0.85, tr * 0.35));
+                L.branches.push(m4.clone());
+              }
               e.set(rng() * 0.6, rng() * 6.3, rng() * 0.6);
               q.setFromEuler(e);
               m4.compose(c, q, s.set(rr, rr, rr));
@@ -361,6 +420,21 @@ export class Flora {
           L.rocks[t].push(m4.clone());
           const topH = t === 3 ? sy * 1.3 : sy * 0.55;
           L.obstacles.push({ x, z, r: sc * 0.85, top: y + topH, kind: topH < 0.7 ? 'bump' : 'rock', id: L.obstacles.length });
+        } else if (roll > 0.93 && roll < 0.93 + 0.05 * (0.3 + d)) {
+          // bare twigs sticking out of the snow
+          e.set(0, rng() * 6.3, 0);
+          q.setFromEuler(e);
+          const sc = 0.6 + rng() * 0.9;
+          m4.compose(p.set(x, y - 0.15, z), q, s.set(sc, sc, sc));
+          L.shrubs[Math.floor(rng() * 2)].push(m4.clone());
+        } else if (roll > 0.985 && !steep) {
+          // snow pillow: a soft natural kicker
+          e.set(0, rng() * 6.3, 0);
+          q.setFromEuler(e);
+          const w = 1.2 + rng() * 1.8, hh = 0.6 + rng() * 0.9;
+          m4.compose(p.set(x, y, z), q, s.set(w, hh, w * (0.8 + rng() * 0.5)));
+          L.pillows[Math.floor(rng() * 2)].push(m4.clone());
+          L.obstacles.push({ x, z, r: w * 0.6, top: y + hh * 0.45, kind: 'bump', id: L.obstacles.length });
         } else if (rng() < 0.012 * (0.4 + d + rk)) {
           // fallen log across the slope
           const len = 4 + rng() * 6, rad = 0.25 + rng() * 0.2;
@@ -430,6 +504,9 @@ export class Flora {
     for (let k = 0; k < 4; k++) add(this._inst(G.rock[k], M.rock, L.rocks[k]));
     add(this._inst(G.log, M.log, L.logs));
     add(this._inst(G.slab, M.rock, L.slabs));
+    add(this._inst(G.branch, M.bark, L.branches));
+    for (let k = 0; k < 2; k++) add(this._inst(G.shrub[k], M.spruce, L.shrubs[k], false));
+    for (let k = 0; k < 2; k++) add(this._inst(G.pillow[k], M.pillow, L.pillows[k]));
     return s;
   }
 

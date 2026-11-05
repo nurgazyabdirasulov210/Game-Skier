@@ -279,7 +279,7 @@ function frame(now) {
   if (state === 'menu') {
     // slow orbit around the rider on the title screen
     const a = time * 0.12;
-    camera.position.set(player.pos.x + Math.sin(a) * 7, player.pos.y + 2.6, player.pos.z + Math.cos(a) * 7);
+    camera.position.set(player.pos.x + Math.sin(a) * 4.5, player.pos.y + 2.0, player.pos.z + Math.cos(a) * 4.5);
     camera.lookAt(player.pos.x, player.pos.y + 1, player.pos.z);
   }
   sky.update(camera, time);
